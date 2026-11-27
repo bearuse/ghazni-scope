@@ -710,19 +710,19 @@ function drawTrace() {
   }
   const along = vert ? h - HEAD : w - RULER - 10;       // time axis length in px
   const across = vert ? w - RULER - LAB : h - HEAD;
-  const T = t => (t - win.t0) / (win.t1 - win.t0) * along;
+  const tpx = t => (t - win.t0) / (win.t1 - win.t0) * along;
   const tOf = px => win.t0 + px / along * (win.t1 - win.t0);
   traceGeom = { RULER, HEAD, cw, along, cols, tOf, LAB, w, nCols };
   // rect in (time, column) space
   function R(ts, te, c, f0, f1) {
-    const a = T(ts), b = Math.max(T(te), a + 0.6), x0 = c * cw + f0 * cw, x1 = c * cw + f1 * cw;
+    const a = tpx(ts), b = Math.max(tpx(te), a + 0.6), x0 = c * cw + f0 * cw, x1 = c * cw + f1 * cw;
     return vert ? [RULER + x0, HEAD + a, x1 - x0, b - a] : [RULER + a, HEAD + x0, b - a, x1 - x0];
   }
   // grid and time ruler
   const step = niceStep(win.t1 - win.t0, along, 70);
   g.strokeStyle = grid; g.fillStyle = muted; g.lineWidth = 1;
   for (let t = Math.ceil(win.t0 / step) * step; t <= win.t1; t += step) {
-    const p = T(t);
+    const p = tpx(t);
     g.beginPath();
     if (vert) { g.moveTo(RULER, HEAD + p + .5); g.lineTo(w, HEAD + p + .5); g.stroke(); g.textAlign = "right"; g.fillText(fmtTick(t, step), RULER - 6, HEAD + p + 4); }
     else { g.moveTo(RULER + p + .5, HEAD); g.lineTo(RULER + p + .5, h); g.stroke(); g.textAlign = "center"; g.fillText(fmtTick(t, step), RULER + p, HEAD - 8); }
@@ -913,7 +913,7 @@ function drawTrace() {
       if (!["call", "send", "reply", "recv"].includes(k) || b === NONE) continue;
       const ca = colOf.get(k === "recv" ? b : a), cb = colOf.get(k === "recv" ? a : b);
       if (ca === undefined || cb === undefined || ca === cb) continue;
-      const p = T(t), xa = RULER + (ca + .5) * cw, xb = RULER + (cb + .5) * cw;
+      const p = tpx(t), xa = RULER + (ca + .5) * cw, xb = RULER + (cb + .5) * cw;
       g.strokeStyle = KCOL[k]; g.fillStyle = KCOL[k];
       g.beginPath();
       if (vert) { g.moveTo(xa, HEAD + p); g.lineTo(xb, HEAD + p); g.stroke(); arrowHead(g, xb, HEAD + p, xb > xa ? 0 : Math.PI); }
@@ -941,7 +941,7 @@ function drawTrace() {
     let lastY = -1e9, skipped = 0;
     for (const e of labelled) {
       if (hidden.has(e[3])) continue;
-      const y = HEAD + T(e[0]);
+      const y = HEAD + tpx(e[0]);
       if (y < lastY + 14 || y < HEAD + 8 || y > h - 24) { skipped++; continue; }
       lastY = y;
       g.fillStyle = KCOL[e[1]] || ink; g.fillRect(x0 - 6, y - 4, 3, 9);
@@ -960,7 +960,7 @@ function drawTrace() {
   // the selected time / instance
   if (selected && selected.t !== undefined) {
     g.strokeStyle = css("--sel"); g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath();
-    const p = T(selected.t);
+    const p = tpx(selected.t);
     if (vert) { g.moveTo(RULER, HEAD + p); g.lineTo(w, HEAD + p); } else { g.moveTo(RULER + p, HEAD); g.lineTo(RULER + p, h); }
     g.stroke(); g.setLineDash([]);
   }
