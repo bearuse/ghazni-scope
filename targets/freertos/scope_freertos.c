@@ -73,6 +73,13 @@
  * masked (no lock between CPUs); the tracer merges them by time. The
  * timestamp (scope_port_time) must be one clock for all CPUs. */
 #define RING_N ( SCOPE_RING_EVENTS / SCOPE_CORES )
+/* several CPUs: an event's time is read before it is published, and a CPU
+ * can be held up in between (an emulator's CPU thread descheduled), so a
+ * round sends only events older than this; a late one from another CPU
+ * still sorts into place (in the next round) */
+#ifndef SCOPE_HOLD_US
+#define SCOPE_HOLD_US ( 2000u * SCOPE_PERIOD_MS )
+#endif
 static struct scope_ev ring[SCOPE_CORES][RING_N];
 static volatile uint32_t r_head[SCOPE_CORES], r_tail[SCOPE_CORES], r_lost[SCOPE_CORES];
 
@@ -544,6 +551,10 @@ static void scope_task(void *arg)
         uint32_t upto[SCOPE_CORES];
         for (int c = 0; c < SCOPE_CORES; c++)
             upto[c] = r_head[c];
+#if SCOPE_CORES > 1
+        uint64_t hold = SCOPE_HOLD_US * scope_port_hz() / 1000000u, now = scope_port_time();
+        uint64_t mark = now > hold ? now - hold : 0;
+#endif
         for (;;) {
             uint32_t n = 0, h[SCOPE_CORES], t[SCOPE_CORES];
             for (int c = 0; c < SCOPE_CORES; c++) {
@@ -558,6 +569,10 @@ static void scope_task(void *arg)
                         best = c;
                 if (best < 0)
                     break;
+#if SCOPE_CORES > 1
+                if (ring[best][t[best] % RING_N].tick > mark)
+                    break;              /* the rest next round */
+#endif
                 batch[n++] = ring[best][t[best]++ % RING_N];
             }
             if (!n)

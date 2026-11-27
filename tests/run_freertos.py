@@ -80,9 +80,15 @@ def verify(s, target):
     check(f"{target}: semaphore counts", any(x[1] == obj["done"] for x in s["semcount"])
           and any(x[1] == obj["isr_sem"] for x in s["semcount"]), s["semcount"][:6])
     isr = {x[0]: x for x in s["isr_stats"]}
+    # spacing, not count against elapsed time: under an emulator on a busy
+    # host the guest's clock runs on while its CPU waits, and late timer
+    # interrupts merge (the count then lags the clock)
+    starts = sorted(x[0] for x in s["isr"] if x[2] == 1)
+    gaps = sorted(b - a for a, b in zip(starts, starts[1:]))
+    med = gaps[len(gaps) // 2] if gaps else 0
     check(f"{target}: interrupt 'tick20' every 20 ms with its handler time",
-          o["irqs"].get("1") == "tick20" and 1 in isr and isr[1][1] >= 40 * s["now"] / 3 / 1.5,
-          (o["irqs"], s["isr_stats"], s["now"]))
+          o["irqs"].get("1") == "tick20" and 1 in isr and isr[1][1] >= 50 and isr[1][3] > 0
+          and 0.015 <= med <= 0.03, (o["irqs"], s["isr_stats"], round(med, 4)))
     comm = {(x[0], x[1], x[2]): x[3] for x in s["comm"]}
     check(f"{target}: communication flow: producer -> queue -> consumer, interrupt tick20 -> isr_sem -> isr_handler",
           comm.get((names["producer"], "ntfn", obj["samples"]), 0) > 100
