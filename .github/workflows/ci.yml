@@ -37,3 +37,16 @@ jobs:
           SCOPE_INSTALLED=1 "$PY" tests/test_host.py
           SCOPE_INSTALLED=1 python3 tests/run_freertos.py posix
           SCOPE_INSTALLED=1 node tests/test_ui.js
+
+  # ESP32 (ESP-IDF, two CPUs) in Espressif's QEMU, inside Espressif's image
+  esp32:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v5.3.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: ESP32 demo built with ESP-IDF, run in QEMU, read by the tool
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          . /opt/esp/idf/export.sh
+          python3 tests/run_freertos.py esp32

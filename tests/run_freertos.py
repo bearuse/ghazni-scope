@@ -7,7 +7,9 @@ check what the Scope saw.
     tests/run_freertos.py mps2      FreeRTOS on Cortex-M3 in QEMU (mps2-an385)
     tests/run_freertos.py mps2-rtt  the same, the stream read from an RTT buffer through
                                     QEMU's GDB server (as a debug probe would)
-    tests/run_freertos.py           all (the QEMU ones skipped without clang/QEMU)
+    tests/run_freertos.py esp32     ESP32 (two CPUs, ESP-IDF) in Espressif's QEMU: with ESP-IDF
+                                    (export.sh) or Docker (image espressif/idf, IDF_IMAGE)
+    tests/run_freertos.py           all of them (skipped where the tools are missing)
 """
 import json, os, shutil, subprocess, sys, tempfile, time
 
@@ -53,9 +55,9 @@ def verify(s, target):
           and not any(n.startswith("IDLE") for n in names), sorted(names))
     o = s["objects"]
     kinds = dict(zip(o["notifications"], o["ntfn_kinds"]))
-    check(f"{target}: objects with names and kinds",
-          kinds == {"samples": "queue", "bus_lock": "mutex", "done": "semaphore", "isr_sem": "semaphore",
-                    "flags": "event group"}, kinds)
+    want = {"samples": "queue", "bus_lock": "mutex", "done": "semaphore", "isr_sem": "semaphore", "flags": "event group"}
+    check(f"{target}: objects with names and kinds (the system's own may be there too)",
+          all(kinds.get(k) == v for k, v in want.items()), kinds)
     obj = {n: i for i, n in enumerate(o["notifications"])}
     blk = s["blocked"] + [x[:6] for x in s["open_blocked"]]
     def blocked_on(task, name, state):
@@ -78,9 +80,15 @@ def verify(s, target):
     check(f"{target}: semaphore counts", any(x[1] == obj["done"] for x in s["semcount"])
           and any(x[1] == obj["isr_sem"] for x in s["semcount"]), s["semcount"][:6])
     isr = {x[0]: x for x in s["isr_stats"]}
+    # spacing, not count against elapsed time: under an emulator on a busy
+    # host the guest's clock runs on while its CPU waits, and late timer
+    # interrupts merge (the count then lags the clock)
+    starts = sorted(x[0] for x in s["isr"] if x[2] == 1)
+    gaps = sorted(b - a for a, b in zip(starts, starts[1:]))
+    med = gaps[len(gaps) // 2] if gaps else 0
     check(f"{target}: interrupt 'tick20' every 20 ms with its handler time",
-          o["irqs"].get("1") == "tick20" and 1 in isr and isr[1][1] >= 40 * s["now"] / 3 / 1.5,
-          (o["irqs"], s["isr_stats"], s["now"]))
+          o["irqs"].get("1") == "tick20" and 1 in isr and isr[1][1] >= 50 and isr[1][3] > 0
+          and 0.015 <= med <= 0.03, (o["irqs"], s["isr_stats"], round(med, 4)))
     comm = {(x[0], x[1], x[2]): x[3] for x in s["comm"]}
     check(f"{target}: communication flow: producer -> queue -> consumer, interrupt tick20 -> isr_sem -> isr_handler",
           comm.get((names["producer"], "ntfn", obj["samples"]), 0) > 100
@@ -148,7 +156,7 @@ def make(d, *args):
     return r.returncode == 0
 
 
-targets = sys.argv[1:] or ["posix", "mps2", "mps2-rtt"]
+targets = sys.argv[1:] or ["posix", "mps2", "mps2-rtt", "esp32"]
 if "posix" in targets:
     print("=== FreeRTOS on Linux (POSIX port) ===")
     if make("freertos-posix"):
@@ -200,5 +208,34 @@ if "mps2-rtt" in targets:
             q.wait()
     else:
         check("mps2-rtt: build", False)
+if "esp32" in targets:
+    print("=== FreeRTOS on ESP32 (ESP-IDF, two CPUs, Espressif's QEMU) ===")
+    image = os.environ.get("IDF_IMAGE", "espressif/idf:v5.3.2")
+    native = shutil.which("idf.py")
+    docker = not native and shutil.which("docker") and subprocess.run(
+        ["docker", "image", "inspect", image], capture_output=True).returncode == 0
+    ex = os.path.join(ROOT, "examples", "esp-idf")
+    if not native and not docker:
+        print(f"  [SKIP] needs ESP-IDF (. export.sh) or Docker with {image}")
+        if sys.argv[1:]:
+            fails += 1
+    elif make("esp-idf", f"IDF_IMAGE={image}"):
+        cmd = os.path.join(ex, "qemu.sh") if native else \
+            f"docker run --rm -i --entrypoint bash -v {ROOT}:/project -w /project/examples/esp-idf {image} qemu.sh"
+        s = scope(cmd, 8)
+        verify(s, "esp32")
+        if s:
+            cpus = {x[0] for x in s["segments"]}
+            names = {v["name"]: int(k) for k, v in s["tasks"].items()}
+            on1 = {x[1] for x in s["segments"] if x[0] == 1}
+            check("esp32: both CPUs run tasks; low, mid and high (pinned) only on CPU 1",
+                  cpus == {0, 1} and {names["low"], names["mid"], names["high"]} <= on1
+                  and not any(x[0] == 0 and x[1] in (names["low"], names["mid"], names["high"]) for x in s["segments"]),
+                  (cpus, sorted(on1)))
+        if docker:
+            subprocess.run("docker ps -q --filter ancestor=" + image + " | xargs -r docker kill",
+                           shell=True, capture_output=True)
+    else:
+        check("esp32: build", False)
 print("ALL PASS" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

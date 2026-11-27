@@ -269,7 +269,7 @@ CFLAGS += -DSCOPE_RING_EVENTS=512        # 8 KB: tracer가 10 ms마다 비우므
 
 ## 7. 제한
 
-- 멀티코어(SMP) FreeRTOS(`configNUMBER_OF_CORES` > 1)는 코어 번호를 기록하도록 만들었지만 시험하지 않았습니다.
+- 멀티코어: 이벤트 링을 CPU마다 두고 tracer가 시각순으로 합칩니다. ESP32(ESP-IDF, CPU 2개)에서 시험했습니다([ESP-IDF.md](ESP-IDF.md)). 일반 FreeRTOS V11의 SMP(`configNUMBER_OF_CORES` > 1, 예: RP2040)는 아직 시험하지 않았습니다. 시각(`scope_port_time`)은 모든 CPU에 하나인 시계여야 합니다.
 - FreeRTOS V10 이하는 시험하지 않았습니다(V10.4 이후라면 대부분 동작할 것으로 보지만 매크로 인자가 다른 것이 있습니다).
 - 기록기는 스트리밍만 합니다. "멈춘 뒤 마지막 N개를 꺼내 보기"(스냅숏) 방식은 없습니다.
 

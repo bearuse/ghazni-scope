@@ -414,6 +414,8 @@ class Model:
                 self._check("heap", task, 0, t, t)
                 self.events.append((t, "heap", cpu, task, op, size))
                 return
+            if not size:                    # a free without its size (ESP-IDF's hook): the block's
+                size = old[1]
             owner = old[2]                  # the block counts against the task that allocated it
             self.heap_used[owner] -= old[1]
             if owner != task:
