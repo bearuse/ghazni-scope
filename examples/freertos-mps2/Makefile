@@ -1,7 +1,9 @@
 # FreeRTOS on QEMU mps2-an385 (Cortex-M3) with the Ghazni Scope recorder.
 #   make            build/demo.elf (clang + ld.lld, no libc)
-#   make run        python3 ../../host/ghazni_scope.py --exec "qemu-system-arm ... -serial stdio"
+#   make run        $(SCOPE) --exec "qemu-system-arm ... -serial stdio"
 K       := ../../third_party/FreeRTOS-Kernel
+# the viewer: this checkout's copy; SCOPE=ghazni-scope to use the installed one
+SCOPE   ?= PYTHONPATH=../.. python3 -m ghazni_scope
 R       := ../../targets/freertos
 CC      := clang
 CFLAGS  ?= -O2 -g
@@ -18,7 +20,7 @@ build/demo.elf: $(SRCS) mps2.ld FreeRTOSConfig.h ../common/demo.h $(R)/scope_fre
 	$(CC) $(CFLAGS) $(SRCS) -fuse-ld=lld -Wl,-T,mps2.ld -Wl,--gc-sections -o $@
 
 run: build/demo.elf
-	python3 ../../host/ghazni_scope.py --exec "$(QEMU)"
+	$(SCOPE) --exec "$(QEMU)"
 
 clean:
 	rm -rf build

@@ -9,7 +9,7 @@ FreeRTOS 커널 ── trace 매크로 ──▶ 기록기(scope_freertos.c) ─
                 (문맥 전환, 큐, mutex ...)   이벤트 하나 16바이트                  10 ms마다 압축해서
                                                                                    scope_port_write()
                                                                                         │ UART 등
-PC: python3 host/ghazni_scope.py ◀──────────────────────────────────────────────────────┘
+PC: ghazni-scope ◀──────────────────────────────────────────────────────────────────────┘
       └─▶ 브라우저 http://localhost:8800
 ```
 
@@ -25,7 +25,7 @@ PC: python3 host/ghazni_scope.py ◀──────────────�
 - FreeRTOS **V11.x** (V11.3.3에서 시험). V10은 매크로 몇 개의 인자가 달라 시험하지 않았습니다.
 - 타깃에서 PC로 바이트를 보낼 길: UART가 가장 흔합니다(921600 baud 이상 권장). USB CDC, TCP, 파일, 표준 출력도 됩니다.
 - 시각을 잴 타이머: 가능하면 1 µs보다 고운 것(Cortex-M3/M4/M7이면 DWT 사이클 카운터).
-- PC: Python 3.8 이상. 시리얼 포트로 받으려면 `pip install pyserial`.
+- PC: Python 3.8 이상과 `ghazni-scope` 명령 (설치는 README의 'PC 도구 설치'). 시리얼 포트로 받으려면 pyserial도.
 
 ## 3. 단계별로
 
@@ -185,8 +185,7 @@ vQueueAddToRegistry(bus_lock, "bus_lock");
 ### 3.8 PC에서 보기
 
 ```sh
-pip install pyserial
-python3 host/ghazni_scope.py --serial /dev/ttyUSB0 --baud 921600     # Windows: --serial COM5
+ghazni-scope --serial /dev/ttyUSB0 --baud 921600     # Windows: --serial COM5
 ```
 
 브라우저에서 <http://localhost:8800>을 엽니다. 그 밖의 연결 방법:

@@ -1,36 +1,29 @@
-#!/usr/bin/env python3
 """Ghazni Scope: live task profiling in the browser (like Percepio
 Tracealyzer's live view), for Ghazni and FreeRTOS.
 
 The target streams kernel events and task statistics (docs/PROTOCOL.md):
 Ghazni's tracer task over its console UART or UDP, the FreeRTOS recorder
 (targets/freertos) over whatever its port writes to. This tool reads that stream,
-keeps the console usable, and serves a live view at http://localhost:8800:
-per-CPU and per-task timelines, wake-up latency, CPU load per task,
-throttling, IRQs, faults, a task table and the console (with a command
-line).
-
-  # QEMU in one go (starts QEMU itself, serial on a local TCP port)
-  make scope                       # = tools/ghazni_scope.py --qemu build/qemu-virt/ghazni.elf
-  # or a QEMU you started yourself: make run-tcp, then
-  tools/ghazni_scope.py --tcp localhost:4444
-  # ROCK 5B over a USB-serial adapter (pip install pyserial)
-  tools/ghazni_scope.py --serial /dev/ttyUSB0 --baud 1500000
-  # over the network (docs/NET.md): commands through the remote shell
-  # (TCP 23), the stream as UDP datagrams - no UART bandwidth limit
-  tools/ghazni_scope.py --net 192.168.77.2:23        # AMP, from Linux
-  tools/ghazni_scope.py --qemu build/qemu-virt/ghazni.elf --net   # QEMU, NIC
+keeps the console usable, and serves a live view at http://localhost:8800.
 
   # FreeRTOS (targets/freertos): a UART, or a program writing the stream to stdout
-  host/ghazni_scope.py --serial /dev/ttyUSB0 --baud 921600
-  host/ghazni_scope.py --exec examples/freertos-posix/build/demo
-  host/ghazni_scope.py --exec "qemu-system-arm -M mps2-an385 -display none -monitor none \
-                               -serial stdio -kernel examples/freertos-mps2/build/demo.elf"
+  ghazni-scope --serial /dev/ttyUSB0 --baud 921600
+  ghazni-scope --exec examples/freertos-posix/build/demo
+  ghazni-scope --exec "qemu-system-arm -M mps2-an385 -display none -monitor none \
+                       -serial stdio -kernel examples/freertos-mps2/build/demo.elf"
+
+  # Ghazni (from the Ghazni tree, 'make scope' does the first)
+  ghazni-scope --qemu build/qemu-virt/ghazni.elf     # starts QEMU, serial on a local TCP port
+  ghazni-scope --tcp localhost:4444                  # a QEMU started with 'make run-tcp'
+  ghazni-scope --serial /dev/ttyUSB0 --baud 1500000  # ROCK 5B (pip install pyserial)
+  ghazni-scope --net 192.168.77.2:23                 # remote shell + UDP stream (AMP, docs/NET.md)
+  ghazni-scope --qemu build/qemu-virt/ghazni.elf --net
 
   --record raw.bin   keep the raw stream;  --replay raw.bin   view it later
   --perfetto out.json  write the trace on exit (https://ui.perfetto.dev)
   --check SECONDS    no browser: collect, print a summary, exit (tests)
 
+Without installing: python3 -m ghazni_scope ... from the repository root.
 With Ghazni, the tool types 'trace stream on' (with --net: 'trace stream
 udp <this host as the target sees it> <port>') into the shell when it sees
 the prompt, and 'trace stream off' when it exits. The FreeRTOS recorder
@@ -39,10 +32,11 @@ streams from the start.
 import argparse, collections, json, os, shlex, signal, socket, subprocess, sys, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import __version__
+from .protocol import Splitter, parse
+from .model import Model
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "scope"))
-from protocol import Splitter, parse      # noqa: E402
-from model import Model                    # noqa: E402
 
 
 class Link:
@@ -319,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
-            with open(os.path.join(HERE, "scope", "index.html"), "rb") as f:
+            with open(os.path.join(HERE, "web", "index.html"), "rb") as f:
                 self._send(200, "text/html; charset=utf-8", f.read())
         elif self.path == "/snapshot":
             self._send(200, "application/json", json.dumps(self.model.snapshot()).encode())
@@ -433,6 +427,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="\n".join(__doc__.split("\n")[2:]))
+    ap.add_argument("--version", action="version", version=f"ghazni-scope {__version__}")
     ap.add_argument("--qemu", metavar="ELF", help="start QEMU with this kernel and connect to it")
     ap.add_argument("--smp", type=int, default=2, help="CPUs for --qemu")
     ap.add_argument("--tcp")
@@ -557,6 +552,3 @@ def run(a, model, qemu):
             state["capture"].close()
     return 0
 
-
-if __name__ == "__main__":
-    sys.exit(main())

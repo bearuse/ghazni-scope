@@ -14,6 +14,31 @@
 
 위 그림은 이 저장소의 FreeRTOS 예제입니다. `high`(우선순위 5)가 `lock bus_lock`으로 막히자 mutex를 잡고 있던 `low`의 우선순위가 1 → 5로 오르고(오른쪽 레이블 "low priority 1 → 5 (inherited)"), 가운데 `mutex bus_lock` 열에 low가 잡고 있던 구간이 보라색 막대로 그려집니다. `consumer`는 `recv samples`(큐가 빔), `isr_handler`는 `take isr_sem`, 그 밖의 태스크는 `sleep`(vTaskDelay)으로 멈춰 있습니다.
 
+## PC 도구 설치
+
+PC 쪽 도구(`ghazni-scope` 명령)는 Python 패키지입니다. Python 3.8 이상만 있으면 되고, 다른 라이브러리는 필요 없습니다.
+
+```sh
+# 1) pipx 설치 (한 번만): Ubuntu/Debian  sudo apt install pipx   macOS  brew install pipx
+#                         Windows  py -m pip install --user pipx
+pipx ensurepath                                                     # 새 터미널부터 명령을 찾음
+
+# 2) ghazni-scope 설치
+pipx install git+https://github.com/bearuse/ghazni-scope
+pipx inject ghazni-scope pyserial                                   # 시리얼 포트로 받을 때만
+
+# 3) 확인과 실행
+ghazni-scope --version
+ghazni-scope --serial /dev/ttyUSB0 --baud 921600                    # 그리고 http://localhost:8800
+```
+
+- **pipx**는 명령줄 도구를 자기만의 격리된 Python 환경에 설치해 줍니다. 요즘 Ubuntu·Debian은 시스템 Python에 `pip install`을 막아 두므로(`externally-managed-environment` 오류) 이 방법을 권합니다.
+- pipx 대신 가상 환경도 됩니다: `python3 -m venv ~/.venvs/scope && ~/.venvs/scope/bin/pip install "ghazni-scope[serial] @ git+https://github.com/bearuse/ghazni-scope"`, 실행은 `~/.venvs/scope/bin/ghazni-scope`.
+- 새 버전으로: `pipx upgrade ghazni-scope`.
+- 이 저장소를 받아 둔 상태라면 설치하지 않고 저장소 맨 위에서 `python3 -m ghazni_scope ...`로도 됩니다. 아래 `make demo`가 이 방식입니다.
+- 저장소가 비공개라면 이 저장소에 권한이 있는 GitHub 계정으로만 설치됩니다(설치할 때 로그인이나 토큰을 물음).
+- Ghazni에서는 이 명령을 `make scope`, `tools/ghazni_scope.py`가 찾아 씁니다.
+
 ## 3분 만에 해 보기 (Linux)
 
 준비물: `gcc`, `make`, `python3`. 다른 설치는 필요 없습니다.
@@ -41,7 +66,7 @@ make demo-m3
 2. `FreeRTOSConfig.h` 맨 끝에 `#define configUSE_TRACE_FACILITY 1`을 확인하고 `#include "scope_freertos.h"`를 넣습니다.
 3. 보드에 맞는 함수 세 개를 씁니다: 시각(`scope_port_time`), 그 주파수(`scope_port_hz`), 바이트 보내기(`scope_port_write`, 보통 UART).
 4. `main()`에서 `vTaskStartScheduler()` 전에 `scope_init()`을 부릅니다.
-5. PC에서 `python3 host/ghazni_scope.py --serial /dev/ttyUSB0 --baud 921600`.
+5. PC에서 `ghazni-scope --serial /dev/ttyUSB0 --baud 921600` (설치는 위 'PC 도구 설치').
 
 자세한 단계, 설정 항목, 인터럽트 기록, 메모리 사용량, 문제 해결은 [docs/FREERTOS.md](docs/FREERTOS.md)에 있습니다.
 
@@ -65,9 +90,11 @@ make demo-m3
 ## 저장소 구성
 
 ```
-host/                 PC 쪽 도구 (Python 3, 표준 라이브러리만)
-  ghazni_scope.py     스트림을 받아 웹 화면을 띄움
-  scope/              프레임 해석(protocol.py), 분석(model.py), 화면(index.html)
+ghazni_scope/         PC 쪽 도구 = Python 패키지 (표준 라이브러리만, pyproject.toml로 설치)
+  cli.py              ghazni-scope 명령: 스트림을 받아 웹 화면을 띄움
+  protocol.py         프레임 해석
+  model.py            분석 (실행 구간, 막힘, 인스턴스, 힙, 트리거 ...)
+  web/index.html      브라우저 화면
 include/              스트림 형식(scope_proto.h)과 인코더(scope_encode.h): RTOS와 무관, 헤더만
 targets/freertos/     FreeRTOS 기록기 (scope_freertos.c/.h, scope_port.h)
 examples/
@@ -86,11 +113,11 @@ make test-host        # PC 도구만: 프레임 해석, 분석 모델, C 인코�
 make test             # + FreeRTOS를 Linux와 Cortex-M3(QEMU)에서 실제로 돌려 확인
 ```
 
-`tests/run_freertos.py`는 예제를 실제로 돌려 받은 스트림에서 다음을 확인합니다: 유실 0, 모든 태스크 이름, 객체 이름과 종류(큐 1, mutex 1, 세마포어 2, 이벤트 그룹 1), 막힌 이유(consumer는 큐, high는 mutex, worker는 이벤트 그룹, isr_handler는 세마포어), mutex를 잡은 태스크와 시간, 매 주기 우선순위 상속(1 → 5 → 1), 큐에 쌓인 개수, 세마포어 개수, 20 ms마다 들어오는 인터럽트와 처리 시간, printf 글·상태 기계·사용자 값, 힙, 스택 사용량. GitHub Actions가 푸시마다 돌립니다.
+`tests/run_freertos.py`는 예제를 실제로 돌려 받은 스트림에서 다음을 확인합니다: 유실 0, 모든 태스크 이름, 객체 이름과 종류(큐 1, mutex 1, 세마포어 2, 이벤트 그룹 1), 막힌 이유(consumer는 큐, high는 mutex, worker는 이벤트 그룹, isr_handler는 세마포어), mutex를 잡은 태스크와 시간, 매 주기 우선순위 상속(1 → 5 → 1), 큐에 쌓인 개수, 세마포어 개수, 20 ms마다 들어오는 인터럽트와 처리 시간, printf 글·상태 기계·사용자 값, 힙, 스택 사용량. GitHub Actions가 푸시마다 돌리며, 저장소에서 바로 돌린 것과 `pip install`로 설치한 것 둘 다 시험합니다.
 
 ## English summary
 
-Ghazni Scope is a free (MIT) live trace viewer for RTOSes, similar in spirit to Percepio Tracealyzer's live view. A small recorder on the target streams compact, COBS-framed events over any byte channel (UART, stdout, TCP); `host/ghazni_scope.py` decodes them and serves a browser UI with a trace view (per task, per interrupt and per kernel object columns, blocking reasons, priority inheritance), event log, CPU load, instance graphs, user events, state machines, heap tracking, communication flow and statistics.
+Ghazni Scope is a free (MIT) live trace viewer for RTOSes, similar in spirit to Percepio Tracealyzer's live view. A small recorder on the target streams compact, COBS-framed events over any byte channel (UART, stdout, TCP); the `ghazni-scope` host tool (a Python package: `pipx install git+https://github.com/bearuse/ghazni-scope`) decodes them and serves a browser UI with a trace view (per task, per interrupt and per kernel object columns, blocking reasons, priority inheritance), event log, CPU load, instance graphs, user events, state machines, heap tracking, communication flow and statistics.
 
 - FreeRTOS V11: `targets/freertos` hooks FreeRTOS's trace macros (include `scope_freertos.h` at the end of `FreeRTOSConfig.h`, provide three port functions, call `scope_init()`). See `docs/FREERTOS.md`.
 - Ghazni: the kernel has the recorder built in.

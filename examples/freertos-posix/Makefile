@@ -1,7 +1,9 @@
 # FreeRTOS on Linux with the Ghazni Scope recorder.
 #   make            build/demo
-#   make run        python3 ../../host/ghazni_scope.py --exec build/demo  (http://localhost:8800)
+#   make run        $(SCOPE) --exec build/demo  (http://localhost:8800)
 K       := ../../third_party/FreeRTOS-Kernel
+# the viewer: this checkout's copy; SCOPE=ghazni-scope to use the installed one
+SCOPE   ?= PYTHONPATH=../.. python3 -m ghazni_scope
 R       := ../../targets/freertos
 CC      ?= gcc
 CFLAGS  ?= -O2 -g -Wall -Wextra -Wno-unused-parameter
@@ -17,7 +19,7 @@ build/demo: $(SRCS) ../common/demo.h FreeRTOSConfig.h $(R)/scope_freertos.h ../.
 	$(CC) $(CFLAGS) $(SRCS) -o $@ -pthread
 
 run: build/demo
-	python3 ../../host/ghazni_scope.py --exec build/demo
+	$(SCOPE) --exec build/demo
 
 clean:
 	rm -rf build
