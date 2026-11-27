@@ -130,6 +130,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await en.click('nav a[data-v=trace]'); await en.click('#bHorz'); await sleep(400); await scan('horizontal');
     await en.mouse.click(700, 500); await sleep(300); await scan('selection');
     await en.click('nav a[data-v=stats]'); await en.click('#bCmpA'); await sleep(300); await scan('compare');
+    const broken = await en.evaluate(() => [...window.__drawn].filter(t => /NaN|undefined|\[object/.test(t)));
+    check('English page: no text drawn as NaN or undefined', broken.length === 0, broken.slice(0, 8));
     check('English page: no Korean text anywhere (views, titles, canvases, selection)', korean.size === 0 && !enErrors.length,
       { korean: [...korean].slice(0, 12), enErrors });
     const enText = await en.evaluate(() => document.body.innerText);
