@@ -1,5 +1,14 @@
 # 변경 이력
 
+## 0.4.0
+
+**디버그 프로브로 받기 (RTT)** ([docs/RTT.md](docs/RTT.md))
+- 타깃: `targets/rtt/scope_rtt.c` — SEGGER RTT와 같은 배치의 제어 블록과 버퍼 "Scope"(4 KB). J-Link, OpenOCD, pyOCD가 모두 읽음. `scope_port_write`를 이것으로
+- PC: J-Link·OpenOCD의 RTT 서버는 `--tcp`로. `--rtt-gdb HOST:PORT --elf app.elf`는 아무 GDB 서버(OpenOCD, J-Link GDB Server, pyOCD, QEMU)로 버퍼를 직접 읽음(ELF에서 `_SEGGER_RTT`, 채널 이름·번호, 읽는 간격)
+- 예제: `examples/freertos-mps2`의 `make rtt`, `make run-rtt`(QEMU의 GDB 서버가 프로브 역할)
+- 시험: `run_freertos.py mps2-rtt`(RTT로 받은 스트림을 UART와 같은 15가지로, CI), 단위 시험(가짜 GDB 서버로 고리 버퍼가 한 바퀴 돈 경우)
+- 실제 프로브와 보드에서는 아직 시험하지 않음
+
 ## 0.3.0
 
 **영어 화면**

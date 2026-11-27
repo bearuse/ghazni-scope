@@ -67,6 +67,7 @@ make demo-m3
 3. 보드에 맞는 함수 세 개를 씁니다: 시각(`scope_port_time`), 그 주파수(`scope_port_hz`), 바이트 보내기(`scope_port_write`, 보통 UART).
 4. `main()`에서 `vTaskStartScheduler()` 전에 `scope_init()`을 부릅니다.
 5. PC에서 `ghazni-scope --serial /dev/ttyUSB0 --baud 921600` (설치는 위 'PC 도구 설치').
+   UART 대신 디버그 프로브(J-Link, ST-Link + OpenOCD, pyOCD)로 받을 수도 있습니다: [docs/RTT.md](docs/RTT.md).
 
 자세한 단계, 설정 항목, 인터럽트 기록, 메모리 사용량, 문제 해결은 [docs/FREERTOS.md](docs/FREERTOS.md)에 있습니다.
 
@@ -141,7 +142,7 @@ ghazni-scope --serial /dev/ttyUSB0 --baud 921600             # then open http://
 **Add it to your FreeRTOS project**:
 1. Build `targets/freertos/scope_freertos.c`; add `include/` and `targets/freertos/` to the include path.
 2. At the end of `FreeRTOSConfig.h`: `configUSE_TRACE_FACILITY 1`, then `#include "scope_freertos.h"`.
-3. Write three port functions: `scope_port_time()` (a free-running timestamp, e.g. the DWT cycle counter), `scope_port_hz()`, `scope_port_write()` (e.g. a UART).
+3. Write three port functions: `scope_port_time()` (a free-running timestamp, e.g. the DWT cycle counter), `scope_port_hz()`, `scope_port_write()` (a UART, or an RTT buffer read by a debug probe: `targets/rtt`, then `ghazni-scope --tcp localhost:19021` with J-Link, `--tcp` to OpenOCD's RTT server, or `--rtt-gdb HOST:PORT --elf app.elf` through any GDB server).
 4. Call `scope_init()` before `vTaskStartScheduler()`; name interrupts with `scope_isr_name()` and wrap handlers in `scope_isr_begin()`/`scope_isr_end()`; name queues with `vQueueAddToRegistry()`.
 
 Costs on a Cortex-M3: about 8.7 KB of code and 39 KB of RAM (32 KB of it the event ring, `-DSCOPE_RING_EVENTS=512` makes it 8 KB). The detailed documents (`docs/`) are in Korean.

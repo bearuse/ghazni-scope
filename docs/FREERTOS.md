@@ -121,6 +121,8 @@ void scope_port_write(const uint8_t *buf, size_t n)
 }
 ```
 
+UART 대신 **디버그 프로브(RTT)**로 보낼 수도 있습니다. UART가 필요 없고 더 빠릅니다: [RTT.md](RTT.md).
+
 UART를 printf 콘솔과 같이 써도 됩니다. 프레임은 `0x01` … `0x00`으로 감싸여 있고, PC 도구가 그 밖의 글자는 콘솔 글로 보여 줍니다(Console 화면, 터미널). 다만 **다른 태스크의 printf가 프레임 중간에 끼어들면 안 되므로**, 콘솔 출력과 `scope_port_write`가 같은 mutex로 UART를 나눠 쓰게 하세요. DMA를 쓴다면 `scope_port_write`에서 전송이 끝날 때까지 기다리거나, 버퍼를 복사한 뒤 돌아오면 됩니다(같은 버퍼를 다음 호출에서 다시 씁니다).
 
 ### 3.4 main()

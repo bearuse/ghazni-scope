@@ -238,4 +238,69 @@ check("live deltas: items of the overlap sent once, a late item (another CPU) st
       d1["events"] == [[0.2005, "wake", 0, 3, 0, 0]] and d1["segments"] == [[0, 2, 0.2, 0.3]]
       and d2["events"] == [[0.19, "irq", 1, 0, 0, 5], [0.4, "wake", 0, 1, 0, 0]], (d1, d2))
 
+# ---- RTT through a GDB server: a fake server holding the target's memory;
+# the buffer wraps (write offset behind the read offset)
+print("=== RTT reader (GDB remote protocol) ===")
+import socket, threading                                    # noqa: E402
+from ghazni_scope.rtt import Gdb, RttReader                # noqa: E402
+mem = bytearray(0x1000)
+CB, NAME, DATA, SIZE = 0x100, 0x200, 0x400, 16
+mem[CB:CB + 11] = b"SEGGER RTT\0"
+struct.pack_into("<ii", mem, CB + 16, 1, 0)
+struct.pack_into("<IIIIII", mem, CB + 24, NAME, DATA, SIZE, 3, 12, 0)     # wr 3, rd 12: wrapped
+mem[NAME:NAME + 6] = b"Scope\0"
+mem[DATA + 12:DATA + 16] = b"ABCD"
+mem[DATA:DATA + 3] = b"EFG"
+log = []
+def fake_gdb(srv):
+    c, _ = srv.accept()
+    buf = b""
+    def reply(body):
+        c.sendall(b"$" + body + b"#" + b"%02x" % (sum(body) & 0xFF))
+    while True:
+        d = c.recv(4096)
+        if not d:
+            return
+        buf += d
+        while buf:
+            if buf[:1] in (b"+", b"-"):
+                buf = buf[1:]
+                continue
+            if buf[:1] == b"\x03":
+                buf = buf[1:]
+                log.append("halt")
+                reply(b"T05")
+                continue
+            if b"#" not in buf or len(buf) < buf.index(b"#") + 3:
+                break
+            end = buf.index(b"#")
+            body, buf = buf[1:end], buf[end + 3:]
+            c.sendall(b"+")
+            if body == b"?":
+                reply(b"T05")
+            elif body == b"c":
+                log.append("go")
+            elif body.startswith(b"m"):
+                addr, n = (int(x, 16) for x in body[1:].split(b","))
+                reply(bytes(mem[addr:addr + n]).hex().encode())
+            elif body.startswith(b"M"):
+                spec, data = body[1:].split(b":")
+                addr, n = (int(x, 16) for x in spec.split(b","))
+                mem[addr:addr + n] = bytes.fromhex(data.decode())
+                reply(b"OK")
+            elif body == b"D":
+                reply(b"OK")
+                return
+srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1)
+threading.Thread(target=fake_gdb, args=(srv,), daemon=True).start()
+g = Gdb(f"127.0.0.1:{srv.getsockname()[1]}")
+r = RttReader(g, CB)
+got = r.poll()
+rd, = struct.unpack_from("<I", mem, CB + 24 + 16)
+again = r.poll()
+g.close()
+check("RTT: finds the 'Scope' up-buffer, reads across the wrap, moves the read offset on",
+      r.name == "Scope" and got == b"ABCDEFG" and rd == 3 and again == b"", (r.name, got, rd, again))
+check("RTT: the CPU is stopped only around the reads and runs again after", log[-1] in ("go", "halt") and log.count("go") >= 2, log)
+
 sys.exit(1 if fails else 0)
