@@ -15,6 +15,7 @@ ghazni-scope <연결 방법>
 | `--serial /dev/ttyUSB0 --baud 921600` | 보드의 UART (USB-시리얼). `pip install pyserial` 필요. Windows는 `COM5` 같은 이름 |
 | `--exec "명령"` | 표준 출력으로 스트림을 내는 프로그램: FreeRTOS POSIX 포트, QEMU `-serial stdio` |
 | `--tcp 호스트:포트` | TCP로 바이트를 주는 곳: QEMU `-serial tcp:...`, ser2net, 보드의 TCP 서버 |
+| `--rtt-gdb 호스트:포트 --elf 앱.elf` | 디버그 프로브의 GDB 서버로 RTT 버퍼를 읽음 ([RTT.md](RTT.md)). J-Link·OpenOCD의 RTT 서버라면 `--tcp` |
 | `--replay 파일` | 저장해 둔 기록(`--record`나 화면의 `기록 저장`으로 만든 것) |
 | `--qemu ELF`, `--net 주소` | Ghazni 전용 (Ghazni 문서 참고) |
 

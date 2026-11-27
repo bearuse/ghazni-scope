@@ -42,8 +42,25 @@ uint64_t scope_port_time(void)
 
 uint64_t scope_port_hz(void) { return configCPU_CLOCK_HZ; }
 
+#ifdef SCOPE_RTT
+/* through the debug probe (make rtt): the RTT buffer, waiting while it is full */
+#include "task.h"
+#include "scope_rtt.h"
+
+void scope_port_write(const uint8_t *buf, size_t n)
+{
+    while (n) {
+        unsigned w = scope_rtt_write(buf, (unsigned)n);
+        buf += w;
+        n -= w;
+        if (n)
+            vTaskDelay(1);
+    }
+}
+#else
 void scope_port_write(const uint8_t *buf, size_t n)
 {
     while (n--)
         uart_putc((char)*buf++);
 }
+#endif

@@ -17,6 +17,8 @@ jobs:
         run: python3 tests/run_freertos.py posix
       - name: FreeRTOS on Cortex-M3 (QEMU mps2-an385)
         run: python3 tests/run_freertos.py mps2
+      - name: the same through RTT (QEMU's GDB server as the debug probe)
+        run: python3 tests/run_freertos.py mps2-rtt
       - name: web page in a browser (Playwright, Chromium)
         run: |
           npm install --no-save --no-package-lock playwright@1.49.1

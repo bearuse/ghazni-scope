@@ -5,7 +5,9 @@ check what the Scope saw.
 
     tests/run_freertos.py posix     FreeRTOS on Linux (POSIX port)
     tests/run_freertos.py mps2      FreeRTOS on Cortex-M3 in QEMU (mps2-an385)
-    tests/run_freertos.py           both (mps2 skipped without clang/QEMU)
+    tests/run_freertos.py mps2-rtt  the same, the stream read from an RTT buffer through
+                                    QEMU's GDB server (as a debug probe would)
+    tests/run_freertos.py           all (the QEMU ones skipped without clang/QEMU)
 """
 import json, os, shutil, subprocess, sys, tempfile, time
 
@@ -24,12 +26,13 @@ def check(name, ok, detail=""):
     fails += not ok
 
 
-def scope(cmd, secs):
-    """Run the target program under the host tool; returns its summary."""
+def scope(cmd, secs, source=None):
+    """Run the target program under the host tool (or read it with `source`,
+    other tool arguments); returns its summary."""
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "s.json")
         env = dict(TOOL_ENV, SCOPE_JSON=out)
-        r = subprocess.run(SCOPE + ["--exec", cmd, "--check", str(secs), "--quiet"],
+        r = subprocess.run(SCOPE + (source or ["--exec", cmd]) + ["--check", str(secs), "--quiet"],
                            env=env, capture_output=True, text=True, timeout=secs + 90)
         print("   ", r.stdout.splitlines()[0] if r.stdout else r.stderr[-300:])
         if r.returncode != 0 or not os.path.exists(out):
@@ -145,7 +148,7 @@ def make(d, *args):
     return r.returncode == 0
 
 
-targets = sys.argv[1:] or ["posix", "mps2"]
+targets = sys.argv[1:] or ["posix", "mps2", "mps2-rtt"]
 if "posix" in targets:
     print("=== FreeRTOS on Linux (POSIX port) ===")
     if make("freertos-posix"):
@@ -177,5 +180,25 @@ if "mps2" in targets:
         verify(scope(f"{QEMU} -M mps2-an385 -display none -monitor none -serial stdio -kernel {elf}", 4), "mps2")
     else:
         check("mps2: build", False)
+if "mps2-rtt" in targets:
+    print("=== FreeRTOS on Cortex-M3, the stream through RTT (QEMU's GDB server as the probe) ===")
+    if not shutil.which(QEMU) or not shutil.which("clang") or not shutil.which("ld.lld"):
+        print("  [SKIP] needs qemu-system-arm, clang and ld.lld")
+        if sys.argv[1:]:
+            fails += 1
+    elif make("freertos-mps2", "rtt"):
+        import socket
+        so = socket.socket(); so.bind(("127.0.0.1", 0)); gport = so.getsockname()[1]; so.close()
+        elf = os.path.join(ROOT, "examples", "freertos-mps2", "build-rtt", "demo.elf")
+        q = subprocess.Popen([QEMU, "-M", "mps2-an385", "-display", "none", "-monitor", "none", "-serial", "null",
+                              "-gdb", f"tcp:127.0.0.1:{gport}", "-kernel", elf],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            verify(scope(None, 4, ["--rtt-gdb", f"127.0.0.1:{gport}", "--elf", elf]), "mps2-rtt")
+        finally:
+            q.kill()
+            q.wait()
+    else:
+        check("mps2-rtt: build", False)
 print("ALL PASS" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

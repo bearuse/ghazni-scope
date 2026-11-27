@@ -44,6 +44,7 @@ class Link:
 
     def __init__(self, a):
         self.a, self.sock, self.ser, self.replay, self.udp, self.proc = a, None, None, None, None, None
+        self.rtt = None
         if a.net:                       # remote shell + UDP stream
             host, port = a.net.rsplit(":", 1) if ":" in a.net else (a.net, "23")
             self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -76,8 +77,21 @@ class Link:
             self.proc = subprocess.Popen(shlex.split(a.exec), stdin=subprocess.PIPE,   # QEMU with
                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)  # -serial stdio)
             os.set_blocking(self.proc.stdout.fileno(), False)
+        elif a.rtt_gdb:                 # an RTT buffer read through a GDB server (debug probe, QEMU)
+            from .rtt import Gdb, RttReader, elf_symbol
+            if a.rtt_addr:
+                addr = int(a.rtt_addr, 0)
+            elif a.elf:
+                addr = elf_symbol(a.elf, "_SEGGER_RTT")
+            else:
+                sys.exit("--rtt-gdb needs --elf (the target's ELF, for _SEGGER_RTT) or --rtt-addr")
+            try:
+                self.rtt = RttReader(Gdb(a.rtt_gdb), addr, a.rtt_channel)
+            except (OSError, ValueError) as e:
+                sys.exit(f"ghazni scope: RTT: {e}")
+            self.rtt_next = time.time()
         else:
-            sys.exit("give --tcp, --serial, --net, --exec or --replay")
+            sys.exit("give --tcp, --serial, --net, --exec, --rtt-gdb or --replay")
 
     def read(self):
         if self.sock:
@@ -94,6 +108,16 @@ class Link:
                 return b""
         if self.ser:
             return self.ser.read(self.ser.in_waiting or 1)
+        if self.rtt:
+            wait = self.rtt_next - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            self.rtt_next = time.time() + self.a.rtt_poll / 1000
+            try:
+                return self.rtt.poll()
+            except (OSError, EOFError) as e:
+                print(f"ghazni scope: RTT: {e}", file=sys.stderr)
+                raise EOFError
         if self.proc:
             try:
                 d = os.read(self.proc.stdout.fileno(), 65536)
@@ -137,6 +161,8 @@ class Link:
                 pass
 
     def close(self):
+        if self.rtt:
+            self.rtt.g.close()          # detach: the target runs on
         if self.proc and self.proc.poll() is None:
             self.proc.kill()
             self.proc.wait()
@@ -443,6 +469,13 @@ def main():
     ap.add_argument("--serial")
     ap.add_argument("--baud", type=int, default=1500000)
     ap.add_argument("--replay")
+    ap.add_argument("--rtt-gdb", metavar="HOST:PORT",
+                    help="read the stream from an RTT buffer through a GDB server (OpenOCD :3333, "
+                         "J-Link GDB Server :2331, pyOCD, QEMU -gdb); docs/RTT.md")
+    ap.add_argument("--elf", help="the target's ELF: where the RTT control block is (_SEGGER_RTT)")
+    ap.add_argument("--rtt-addr", help="the RTT control block's address, without --elf (e.g. 0x20000008)")
+    ap.add_argument("--rtt-channel", default="Scope", help="RTT up-buffer: its name or number (default Scope)")
+    ap.add_argument("--rtt-poll", type=float, default=10, metavar="MS", help="how often to read the buffer (ms)")
     ap.add_argument("--exec", metavar="CMD", help="run CMD and read the stream from its output "
                     "(FreeRTOS on Linux, or QEMU with -serial stdio)")
     ap.add_argument("--record")
