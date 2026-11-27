@@ -10,12 +10,27 @@
  * demo_isr() from an interrupt every 20 ms (POSIX: the tick hook,
  * Cortex-M: a hardware timer). MIT License - see LICENSE. */
 #include <stdint.h>
+#ifdef ESP_PLATFORM                    /* ESP-IDF: FreeRTOS headers under freertos/ */
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "freertos/event_groups.h"
+#else
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
 #include "event_groups.h"
+#endif
 #include "demo.h"
+#ifdef ESP_PLATFORM
+#include "scope_freertos.h"                /* the API (elsewhere FreeRTOSConfig.h brings it) */
+/* two CPUs: low, mid and high share CPU 1, or there is no inversion to see */
+#define CREATE_ON_ONE(f, n, p)  xTaskCreatePinnedToCore(f, n, DEMO_STACK, NULL, p, NULL, 1)
+#else
+#define CREATE_ON_ONE(f, n, p)  xTaskCreate(f, n, DEMO_STACK, NULL, p, NULL)
+#endif
 
 static QueueHandle_t samples;
 static SemaphoreHandle_t bus_lock, done, isr_sem;
@@ -148,9 +163,9 @@ void demo_start(void)
 
     xTaskCreate(producer, "producer", DEMO_STACK, NULL, 2, NULL);
     xTaskCreate(consumer, "consumer", DEMO_STACK, NULL, 3, NULL);
-    xTaskCreate(low, "low", DEMO_STACK, NULL, 1, NULL);
-    xTaskCreate(mid, "mid", DEMO_STACK, NULL, 4, NULL);
-    xTaskCreate(high, "high", DEMO_STACK, NULL, 5, NULL);
+    CREATE_ON_ONE(low, "low", 1);
+    CREATE_ON_ONE(mid, "mid", 4);
+    CREATE_ON_ONE(high, "high", 5);
     xTaskCreate(controller, "controller", DEMO_STACK, NULL, 2, NULL);
     xTaskCreate(worker, "worker", DEMO_STACK, NULL, 3, NULL);
     xTaskCreate(isr_handler, "isr_handler", DEMO_STACK, NULL, 6, NULL);

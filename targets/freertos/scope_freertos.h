@@ -54,15 +54,32 @@ void scope_rtos_evgroup_got(void *group, uint32_t bits);
 void scope_rtos_heap(int op, void *addr, unsigned size);
 void scope_rtos_timeout(void);
 
-/* ---- FreeRTOS trace macros */
+#ifndef SCOPE_API_ONLY      /* ESP-IDF: your code gets the API, FreeRTOS the macros */
+/* ---- FreeRTOS trace macros
+ * Normally included at the end of FreeRTOSConfig.h. ESP-IDF's
+ * FreeRTOSConfig.h cannot be edited, so there the build force-includes this
+ * file before everything (-include, SCOPE_FORCE_INCLUDE; targets/esp-idf):
+ * the macros are defined first and FreeRTOS.h keeps them, and nothing here
+ * may then depend on the configuration at definition time. */
+#ifndef SCOPE_FORCE_INCLUDE
 #if configUSE_TRACE_FACILITY != 1
 #error "Ghazni Scope needs configUSE_TRACE_FACILITY 1"
 #endif
+#endif
 
-#if ( configRECORD_STACK_HIGH_ADDRESS == 1 ) || ( portSTACK_GROWTH > 0 )
+#if defined( SCOPE_FORCE_INCLUDE ) || ( configRECORD_STACK_HIGH_ADDRESS == 1 ) || ( portSTACK_GROWTH > 0 )
 #define SCOPE_STACK_HI_( t ) ( ( void * ) ( t )->pxEndOfStack )
 #else
 #define SCOPE_STACK_HI_( t ) ( ( void * ) 0 )
+#endif
+
+/* the task running on this CPU, inside tasks.c */
+#if defined( ESP_PLATFORM )
+#define SCOPE_CURRENT_TCB_      pxCurrentTCBs[ xPortGetCoreID() ]
+#elif !defined( SCOPE_FORCE_INCLUDE ) && ( configNUMBER_OF_CORES > 1 )
+#define SCOPE_CURRENT_TCB_      pxCurrentTCBs[ portGET_CORE_ID() ]
+#else
+#define SCOPE_CURRENT_TCB_      pxCurrentTCB
 #endif
 
 #define traceTASK_CREATE( pxNewTCB ) \
@@ -70,8 +87,8 @@ void scope_rtos_timeout(void);
                             ( unsigned ) ( pxNewTCB )->uxPriority, ( void * ) ( pxNewTCB )->pxStack, \
                             SCOPE_STACK_HI_( pxNewTCB ) )
 #define traceTASK_DELETE( pxTaskToDelete )      scope_rtos_task_delete( ( void * ) ( pxTaskToDelete ) )
-#define traceTASK_SWITCHED_OUT()                scope_rtos_switched_out( ( void * ) pxCurrentTCB )
-#define traceTASK_SWITCHED_IN()                 scope_rtos_switched_in( ( void * ) pxCurrentTCB )
+#define traceTASK_SWITCHED_OUT()                scope_rtos_switched_out( ( void * ) SCOPE_CURRENT_TCB_ )
+#define traceTASK_SWITCHED_IN()                 scope_rtos_switched_in( ( void * ) SCOPE_CURRENT_TCB_ )
 #define traceMOVED_TASK_TO_READY_STATE( pxTCB ) scope_rtos_ready( ( void * ) ( pxTCB ) )
 
 /* why the running task is about to stop (SCOPE_ST_* values: 3 send, 4 recv, 6 wait, 7 sleep) */
@@ -111,6 +128,11 @@ void scope_rtos_timeout(void);
 #define traceQUEUE_RECEIVE_FROM_ISR( pxQueue ) \
     scope_rtos_queue_receive( ( void * ) ( pxQueue ), ( unsigned ) ( pxQueue )->uxMessagesWaiting - 1, 1 )
 #define traceQUEUE_RECEIVE_FAILED( pxQueue )        scope_rtos_timeout()
+/* ESP-IDF's FreeRTOS: taking a semaphore or mutex, giving from an interrupt */
+#define traceQUEUE_SEMAPHORE_RECEIVE( pxQueue ) \
+    scope_rtos_queue_receive( ( void * ) ( pxQueue ), ( unsigned ) ( pxQueue )->uxMessagesWaiting - 1, 0 )
+#define traceQUEUE_GIVE_FROM_ISR( pxQueue ) \
+    scope_rtos_queue_send( ( void * ) ( pxQueue ), ( unsigned ) ( pxQueue )->uxMessagesWaiting + 1, 1 )
 
 /* event groups */
 #define traceEVENT_GROUP_CREATE( xEventGroup )      scope_rtos_evgroup_create( ( void * ) ( xEventGroup ) )
@@ -127,5 +149,6 @@ void scope_rtos_timeout(void);
 #define traceMALLOC( pvAddress, uiSize )            scope_rtos_heap( 0, ( pvAddress ), ( unsigned ) ( uiSize ) )
 #define traceFREE( pvAddress, uiSize )              scope_rtos_heap( 1, ( pvAddress ), ( unsigned ) ( uiSize ) )
 
+#endif /* SCOPE_API_ONLY */
 #endif /* __ASSEMBLER__ */
 #endif

@@ -1,5 +1,15 @@
 # 변경 이력
 
+## 0.5.0
+
+**ESP32 (ESP-IDF)** ([docs/ESP-IDF.md](docs/ESP-IDF.md))
+- 컴포넌트 `targets/esp-idf/ghazni_scope`: 프로젝트에 `EXTRA_COMPONENT_DIRS` 한 줄과 `CONFIG_FREERTOS_USE_TRACE_FACILITY=y`. trace 매크로를 ESP-IDF의 FreeRTOS에 `-include`로 넣음(그쪽 FreeRTOSConfig.h는 고칠 수 없음), `esp_timer` 시계, UART0, 힙 훅(`CONFIG_HEAP_USE_HOOKS`)
+- 기록기: CPU마다 이벤트 링(각 CPU는 자기 링에만, CPU 사이 잠금 없음), tracer가 시각순으로 합침. `pxCurrentTCBs[CPU]`. ESP-IDF만의 `traceQUEUE_SEMAPHORE_RECEIVE`, `traceQUEUE_GIVE_FROM_ISR`. 한 차례에 그 순간까지 쌓인 것만 보냄(보내기가 이벤트를 만드는 UART 드라이버에서 끝없이 돌던 것). 프레임 버퍼 크기를 태스크·객체 수에서 계산(늘리면 넘치던 것)
+- 도구: 크기 없는 해제(ESP-IDF의 훅)는 할당 때의 크기로
+- 예제 `examples/esp-idf`(CPU 2개, 하드웨어 타이머 인터럽트): `make`(ESP-IDF 또는 Docker), `make run`(Espressif의 QEMU)
+- 시험: `run_freertos.py esp32`(15가지 + 두 CPU, CPU 1에 묶은 태스크), CI에 ESP-IDF 이미지로
+- 화면: Trace View의 레이블 두 개가 NaN으로 나오던 것(0.3.0의 영어 화면에서 생김) 고침, 브라우저 시험이 NaN·undefined를 잡음
+
 ## 0.4.0
 
 **디버그 프로브로 받기 (RTT)** ([docs/RTT.md](docs/RTT.md))

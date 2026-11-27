@@ -1,0 +1,12 @@
+# Ghazni Scope needs FreeRTOS's task and queue numbers
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+# 1 kHz tick like the other examples
+CONFIG_FREERTOS_HZ=1000
+# frames are binary: no CR/LF translation on the console (the recorder writes
+# through the UART driver anyway; logs stay readable)
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
+CONFIG_ESP_TASK_WDT_EN=n
+# queue, semaphore and mutex names (vQueueAddToRegistry does nothing at 0)
+CONFIG_FREERTOS_QUEUE_REGISTRY_SIZE=16
+# heap use per task (Memory Heap view): ESP-IDF's allocator hooks
+CONFIG_HEAP_USE_HOOKS=y

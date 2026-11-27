@@ -12,10 +12,17 @@
  * MIT License - see LICENSE. */
 #include <stdarg.h>
 #include <string.h>
+#ifdef ESP_PLATFORM                    /* ESP-IDF: FreeRTOS headers under freertos/ */
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/event_groups.h"
+#else
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "event_groups.h"
+#endif
 #include "scope_proto.h"
 #include "scope_encode.h"
 #include "scope_port.h"
@@ -46,32 +53,56 @@
 #define configIDLE_TASK_NAME "IDLE"     /* tasks.c's default */
 #endif
 
-#if configNUMBER_OF_CORES > 1
+#ifndef configNUMBER_OF_CORES
+#define configNUMBER_OF_CORES 1
+#endif
+#define SCOPE_CORES configNUMBER_OF_CORES
+#if SCOPE_CORES > 1
+#ifdef ESP_PLATFORM
+#define SCOPE_CPU() ( ( uint8_t ) xPortGetCoreID() )
+#else
 #define SCOPE_CPU() ( ( uint8_t ) portGET_CORE_ID() )
+#endif
+#define SCOPE_FENCE() __atomic_thread_fence( __ATOMIC_SEQ_CST )
 #else
 #define SCOPE_CPU() 0
+#define SCOPE_FENCE() __asm__ volatile( "" ::: "memory" )
 #endif
 
-/* ---- the ring */
-static struct scope_ev ring[SCOPE_RING_EVENTS];
-static volatile uint32_t r_head, r_tail, r_lost;
+/* ---- the rings: one per CPU, written only by that CPU with its interrupts
+ * masked (no lock between CPUs); the tracer merges them by time. The
+ * timestamp (scope_port_time) must be one clock for all CPUs. */
+#define RING_N ( SCOPE_RING_EVENTS / SCOPE_CORES )
+static struct scope_ev ring[SCOPE_CORES][RING_N];
+static volatile uint32_t r_head[SCOPE_CORES], r_tail[SCOPE_CORES], r_lost[SCOPE_CORES];
 
 static void put(uint8_t type, uint8_t a, uint8_t b, uint32_t arg)
 {
     UBaseType_t m = portSET_INTERRUPT_MASK_FROM_ISR();
-    if (r_head - r_tail >= SCOPE_RING_EVENTS) {
-        r_lost++;
+    uint8_t c = SCOPE_CPU();
+    uint32_t h = r_head[c];
+    if (h - r_tail[c] >= RING_N) {
+        r_lost[c]++;
     } else {
-        struct scope_ev *e = &ring[r_head & (SCOPE_RING_EVENTS - 1)];
+        struct scope_ev *e = &ring[c][h % RING_N];
         e->tick = scope_port_time();
         e->type = type;
-        e->cpu = SCOPE_CPU();
+        e->cpu = c;
         e->a = a;
         e->b = b;
         e->arg = arg;
-        r_head++;
+        SCOPE_FENCE();                  /* the event before the head */
+        r_head[c] = h + 1;
     }
     portCLEAR_INTERRUPT_MASK_FROM_ISR(m);
+}
+
+static uint32_t lost_total(void)
+{
+    uint32_t n = 0;
+    for (int c = 0; c < SCOPE_CORES; c++)
+        n += r_lost[c];
+    return n;
 }
 
 /* ---- tasks: our numbers live in the TCB (uxTaskGetTaskNumber) */
@@ -405,10 +436,17 @@ void scope_printf(uint8_t channel, const char *fmt, ...)
     text(channel & 0x3F, buf);
 }
 
-uint32_t scope_lost(void) { return r_lost; }
+uint32_t scope_lost(void) { return lost_total(); }
 
 /* ---- the streaming task */
-static uint8_t frame[24 + BATCH * SCOPE_EV_MAX + 256];
+/* the largest frame: events, the hello (20 bytes a task), the objects (16 + 1
+ * a name and kind, 16 an interrupt) or the statistics (32 a task) */
+#define SZ_EVENTS   ( 24 + BATCH * SCOPE_EV_MAX )
+#define SZ_HELLO    ( 16 + 20 * SCOPE_MAX_TASKS )
+#define SZ_OBJECTS  ( 4 + 17 * SCOPE_MAX_OBJECTS + 16 * SCOPE_MAX_IRQS )
+#define SZ_STATS    ( 16 + ( int ) sizeof( struct scope_task ) * SCOPE_MAX_TASKS )
+#define SZ_MAX2( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
+static uint8_t frame[SZ_MAX2( SZ_MAX2( SZ_EVENTS, SZ_HELLO ), SZ_MAX2( SZ_OBJECTS, SZ_STATS ) ) + 16];
 static uint8_t wire[sizeof frame + sizeof frame / 254 + 4];
 static struct scope_ev batch[BATCH];
 static uint32_t send_us;                /* time spent writing (the 'S' frames report it) */
@@ -501,16 +539,33 @@ static void scope_task(void *arg)
             objs_dirty = 0;
             send_objects();
         }
+        /* only what is there now: sending can itself make events (a UART
+           driver's queue, ESP-IDF), which wait for the next round */
+        uint32_t upto[SCOPE_CORES];
+        for (int c = 0; c < SCOPE_CORES; c++)
+            upto[c] = r_head[c];
         for (;;) {
-            uint32_t h = r_head, t = r_tail, n = h - t;
+            uint32_t n = 0, h[SCOPE_CORES], t[SCOPE_CORES];
+            for (int c = 0; c < SCOPE_CORES; c++) {
+                h[c] = upto[c];
+                t[c] = r_tail[c];
+            }
+            SCOPE_FENCE();              /* the heads before the events */
+            while (n < BATCH) {         /* the oldest head of all rings next */
+                int best = -1;
+                for (int c = 0; c < SCOPE_CORES; c++)
+                    if (t[c] != h[c] && (best < 0 || ring[c][t[c] % RING_N].tick < ring[best][t[best] % RING_N].tick))
+                        best = c;
+                if (best < 0)
+                    break;
+                batch[n++] = ring[best][t[best]++ % RING_N];
+            }
             if (!n)
                 break;
-            if (n > BATCH)
-                n = BATCH;
-            for (uint32_t i = 0; i < n; i++)
-                batch[i] = ring[(t + i) & (SCOPE_RING_EVENTS - 1)];
-            r_tail = t + n;             /* the consumer's only write */
-            uint32_t lost = r_lost;
+            SCOPE_FENCE();
+            for (int c = 0; c < SCOPE_CORES; c++)
+                r_tail[c] = t[c];       /* the consumer's only write */
+            uint32_t lost = lost_total();
             send(frame, scope_frame_events(frame, seq + (lost - lost_sent), batch, n, lost - lost_sent));
             seq += n + (lost - lost_sent);
             lost_sent = lost;

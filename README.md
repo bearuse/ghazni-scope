@@ -7,6 +7,7 @@
 | RTOS | 기록하는 쪽 | 문서 |
 |---|---|---|
 | **FreeRTOS** (V11) | 이 저장소의 `targets/freertos` (C 파일 하나 + 헤더) | [docs/FREERTOS.md](docs/FREERTOS.md) |
+| **ESP32** (ESP-IDF 5.x, CPU 2개) | 컴포넌트 `targets/esp-idf/ghazni_scope` (프로젝트에 두 줄) | [docs/ESP-IDF.md](docs/ESP-IDF.md) |
 | **Ghazni** | Ghazni 커널에 내장 (tracer 태스크) | Ghazni 저장소의 `docs/SCOPE.md` |
 | 그 밖의 RTOS | 스트림 형식만 맞추면 됨 | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
 
@@ -121,6 +122,7 @@ make test-ui          # 브라우저로 화면 12개를 열어 오류 없이 그
 
 Ghazni Scope is a free (MIT) live trace viewer for RTOSes, similar in spirit to Percepio Tracealyzer's live view. A small recorder on the target streams compact, COBS-framed events over any byte channel (UART, stdout, TCP); the `ghazni-scope` host tool (a Python package: `pipx install git+https://github.com/bearuse/ghazni-scope`) decodes them and serves a browser UI with a trace view (per task, per interrupt and per kernel object columns, blocking reasons, priority inheritance), event log, CPU load, instance graphs, user events, state machines, heap tracking, communication flow and statistics.
 
+- ESP32 / ESP-IDF 5.x (dual core): the component `targets/esp-idf/ghazni_scope`; add it with `EXTRA_COMPONENT_DIRS` and set `CONFIG_FREERTOS_USE_TRACE_FACILITY=y`. Tested in Espressif's QEMU (`make -C examples/esp-idf run`, Docker is enough). See `docs/ESP-IDF.md`.
 - FreeRTOS V11: `targets/freertos` hooks FreeRTOS's trace macros (include `scope_freertos.h` at the end of `FreeRTOSConfig.h`, provide three port functions, call `scope_init()`). See `docs/FREERTOS.md`.
 - Ghazni: the kernel has the recorder built in.
 - Other RTOSes: implement the stream format in `docs/PROTOCOL.md` (`include/scope_encode.h` does the encoding).
