@@ -17,6 +17,11 @@ jobs:
         run: python3 tests/run_freertos.py posix
       - name: FreeRTOS on Cortex-M3 (QEMU mps2-an385)
         run: python3 tests/run_freertos.py mps2
+      - name: web page in a browser (Playwright, Chromium)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.49.1
+          npx playwright install --with-deps chromium
+          node tests/test_ui.js
       # the package as users get it: installed with pipx, then the same tests
       # run against the installed command and module
       - name: install with pipx
@@ -29,3 +34,4 @@ jobs:
           PY="$(pipx environment --value PIPX_LOCAL_VENVS)/ghazni-scope/bin/python"
           SCOPE_INSTALLED=1 "$PY" tests/test_host.py
           SCOPE_INSTALLED=1 python3 tests/run_freertos.py posix
+          SCOPE_INSTALLED=1 node tests/test_ui.js

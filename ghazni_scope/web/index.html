@@ -223,13 +223,14 @@ svg text { font: 11px -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
         <div class="scroll" style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-content:start"><table id="smTab"></table><table id="smTr"></table></div></div>
     </section>
     <section class="view" id="v-heap">
-      <div class="vbar"><b>Memory Heap</b> <span id="hHeap">할당기가 알린 할당·해제: 사용량 변화와 아직 해제되지 않은 블록</span> <span class="hint">처음엔 마지막 활동 구간. 끌어서 확대, 더블클릭: 전체 기록 ↔ 마지막 활동</span><button class="csv" data-csv="heapTab,heapLive,heapWarn">CSV</button></div>
+      <div class="vbar"><b>Memory Heap</b> <span id="hHeap">할당기가 알린 할당·해제: 사용량 변화와 아직 해제되지 않은 블록</span> <span class="hint">처음엔 마지막 활동 구간. 끌어서 확대, 더블클릭: 전체 기록 ↔ 마지막 활동</span>
+        <label title="스케줄러 시작 전·커널의 할당(대개 태스크 스택과 큐)은 크고 변하지 않아서 태스크의 작은 할당을 바닥에 눌러 버립니다. 표에는 그대로 나옵니다"><input type="checkbox" id="heapOut" checked> 태스크 밖 할당은 그래프에서 빼기</label><button class="csv" data-csv="heapTab,heapLive,heapWarn">CSV</button></div>
       <div class="vbody" style="display:grid;grid-template-rows:minmax(120px,48%) 1fr">
         <div style="position:relative"><canvas id="cHeap"></canvas></div>
         <div class="scroll" style="display:grid;grid-template-columns:1fr 1.2fr;gap:0 12px;align-content:start"><table id="heapTab" style="align-self:start"></table><table id="heapLive"></table><table id="heapWarn" style="grid-column:1/-1;margin-top:10px"></table></div></div>
     </section>
     <section class="view" id="v-deps">
-      <div class="vbar"><b>Dependency Graph</b> <span>태스크가 누구를 기다리나: CALL(클라이언트 → 서버, 응답까지 기다린 시간)과 signal(보낸 태스크 → 깨어난 태스크). 선 굵기 = 횟수</span></div>
+      <div class="vbar"><b>Dependency Graph</b> <span id="hDeps">태스크가 누구를 깨우고 누구를 기다리나. 선 굵기 = 횟수</span></div>
       <div class="vbody scroll"><svg id="sDeps" width="100%"></svg></div>
     </section>
     <section class="view" id="v-comm">
@@ -310,12 +311,14 @@ function osText() {
   return D.os === "Ghazni" ? {
     user: '태스크의 <code>ghazni_trace_user(channel, value)</code>(값), <code>ghazni_trace_printf</code>(글), 셸 <code>mark</code>',
     sm: '태스크의 <code>ghazni_trace_state(machine, "STATE")</code>: 상태가 언제 바뀌었고 얼마나 머물렀는지',
+    deps: '태스크가 누구를 기다리나: CALL(클라이언트 → 서버, 응답까지 기다린 시간)과 signal(보낸 태스크 → 깨어난 태스크). 선 굵기 = 횟수',
     heap: '할당기가 알린 할당·해제(<code>ghazni_trace_heap</code>, 미들웨어 <code>malloc</code>): 사용량 변화와 아직 해제되지 않은 블록',
     cmd: "셸 명령 (예: ps, hog, bench 1000, mark 1 42)",
     userEmpty: "(셸: mark 1 42)", smEmpty: "(셸: tdemo)", heapEmpty: "(셸: tdemo, 또는 미들웨어 태스크)",
   } : {
     user: '태스크의 <code>scope_user(channel, value)</code>(값), <code>scope_printf</code>(글)',
     sm: '태스크의 <code>scope_state(machine, "STATE")</code>: 상태가 언제 바뀌었고 얼마나 머물렀는지',
+    deps: '태스크가 누구를 깨우나: 큐에 보내거나 세마포어·mutex·이벤트 그룹을 주어서 기다리던 태스크를 깨운 횟수(보낸 태스크 → 깨어난 태스크). 선 굵기 = 횟수',
     heap: '<code>pvPortMalloc</code> / <code>vPortFree</code>: 사용량 변화와 아직 해제되지 않은 블록. "(태스크 밖)" = 스케줄러 시작 전이나 인터럽트에서 할당',
     cmd: "타깃으로 보낼 글 (프로그램의 표준 입력·UART)",
     userEmpty: "(scope_user)", smEmpty: "(scope_state)", heapEmpty: "(pvPortMalloc)",
@@ -323,7 +326,7 @@ function osText() {
 }
 function osTexts() {
   const o = osText();
-  $("hUser").innerHTML = o.user; $("hSm").innerHTML = o.sm; $("hHeap").innerHTML = o.heap; $("cmd").placeholder = o.cmd;
+  $("hUser").innerHTML = o.user; $("hSm").innerHTML = o.sm; $("hDeps").innerHTML = o.deps; $("hHeap").innerHTML = o.heap; $("cmd").placeholder = o.cmd;
 }
 const heapName = id => id === 0xFE ? "(태스크 밖)" : tname(id);
 function objLabel(k, i) {               // "mutex pi_lock", "semaphore pi_done", "queue samples", "ep pong"
@@ -529,7 +532,7 @@ function drawTrace() {
     if (few.length) { drawTrace.folded = cols.length - few.length; cols = few; } else drawTrace.folded = 0;
   } else drawTrace.folded = 0;
   const showLabels = vert && $("oLabels").checked;
-  const RULER = vert ? 84 : 110, HEAD = vert ? 76 : 40, LAB = showLabels ? Math.min(300, Math.max(180, w * 0.28)) : 0;
+  const RULER = vert ? 84 : 110, LAB = showLabels ? Math.min(300, Math.max(180, w * 0.28)) : 0;
   // one column per interrupt seen in the window (the kernel timer included)
   const irqSet = new Set();
   for (let i = lowerBound(D.isr, 0, win.t0 - 0.05); i < D.isr.length && D.isr[i][0] <= win.t1; i++) irqSet.add(D.isr[i][2]);
@@ -561,9 +564,20 @@ function drawTrace() {
   const objBase = cols.length + irqIds.length;
   const objCol = new Map(objs.map((o, k) => [o.k + o.i, objBase + k]));
   const nCols = cols.length + irqIds.length + objs.length;
+  // vertical: a name wider than its column is written at 60 degrees; the header is as
+  // tall as the longest such name needs (up to 170 px), so none is cut off
+  let HEAD = vert ? 76 : 40;
+  const across0 = vert ? w - RULER - LAB : h - HEAD;
+  const cw = Math.max(8, Math.min(vert ? 96 : 30, across0 / Math.max(1, nCols)));
+  if (vert) {
+    const names = cols.map(id => byCpu ? "CPU " + id : tname(id))
+      .concat(irqIds.map(id => id < 0 ? "IRQ" : ((D.objects.irqs || {})[id] || "IRQ " + id)), objs.map(o => objLabel(o.k, o.i)));
+    let tall = 0;
+    for (const n of names) { const wd = g.measureText(n).width; if (wd > cw - 4) tall = Math.max(tall, wd * 0.87 + 18); }
+    HEAD = Math.round(Math.min(170, Math.max(76, tall)));
+  }
   const along = vert ? h - HEAD : w - RULER - 10;       // time axis length in px
   const across = vert ? w - RULER - LAB : h - HEAD;
-  const cw = Math.max(8, Math.min(vert ? 96 : 30, across / Math.max(1, nCols)));
   const T = t => (t - win.t0) / (win.t1 - win.t0) * along;
   const tOf = px => win.t0 + px / along * (win.t1 - win.t0);
   traceGeom = { RULER, HEAD, cw, along, cols, tOf, LAB, w, nCols };
@@ -1097,13 +1111,15 @@ function drawSm() {
 function drawHeap() {
   const { g, w, h } = fit($("cHeap"));
   g.clearRect(0, 0, w, h);
-  const tasks = [...new Set(D.heap.map(x => x[1]))];
+  let tasks = [...new Set(D.heap.map(x => x[1]))];
+  if ($("heapOut").checked && tasks.some(t => t !== 0xFE)) tasks = tasks.filter(t => t !== 0xFE);
+  const shown = new Set(tasks), hv = D.heap.filter(x => shown.has(x[1]));
   const L = 70, B = 24, T0 = 16;
-  const first = D.heap.length ? D.heap[0][0] : 0, last = D.heap.length ? D.heap[D.heap.length - 1][0] : 0;
+  const first = hv.length ? hv[0][0] : 0, last = hv.length ? hv[hv.length - 1][0] : 0;
   let tMin = first - (last - first) * 0.03, tMax = Math.max(last + (last - first) * 0.15, tMin + 1e-3);
-  if (zoomR.heap === null) [tMin, tMax] = burstRange(D.heap.map(x => x[0]));
+  if (zoomR.heap === null) [tMin, tMax] = burstRange(hv.map(x => x[0]));
   else if (Array.isArray(zoomR.heap)) [tMin, tMax] = zoomR.heap;
-  let vmax = 1; for (const x of D.heap) vmax = Math.max(vmax, x[5]);
+  let vmax = 1; for (const x of hv) vmax = Math.max(vmax, x[5]);
   vmax *= 1.1;
   const X = t => L + (t - tMin) / (tMax - tMin) * (w - L - 14), Y = v => h - B - v / vmax * (h - B - T0);
   drawHeap.geom = { L, R: w - 14, tMin, tMax };
@@ -1370,7 +1386,7 @@ $("bCpus").onclick = () => { byCpu = true; $("bCpus").classList.add("on"); $("bT
 $("bDetail").onclick = () => { $("app").classList.toggle("nodetail"); dirty(); };
 $("bTheme").onclick = () => { for (const k in cssCache) delete cssCache[k]; const r = document.documentElement, d = r.dataset.theme === "dark" ||
   (!r.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches); r.dataset.theme = d ? "light" : "dark"; dirty(); };
-["oIdle", "oReady", "oComm", "oLabels", "instMetric", "instLog", "instWin", "logWin", "objSel", "smWin", "oActive", "oBlk", "oObj"].forEach(id => $(id).onchange = dirty);
+["oIdle", "oReady", "oComm", "oLabels", "instMetric", "instLog", "instWin", "logWin", "objSel", "smWin", "oActive", "oBlk", "oObj", "heapOut"].forEach(id => $(id).onchange = dirty);
 $("logFind").oninput = dirty;
 $("logScroll").onscroll = renderLog;
 $("legend").onclick = ev => { const d = ev.target.closest("[data-task]"); if (!d) return; const id = +d.dataset.task;
@@ -1575,7 +1591,7 @@ document.querySelectorAll("button.csv").forEach(b => b.onclick = () => {
 });
 
 // ------------------------------------------------------------------ settings kept in the browser
-const PREF_IDS = ["oIdle", "oReady", "oComm", "oLabels", "oActive", "oBlk", "oObj", "instLog", "instWin", "logWin", "smWin", "trigPause"];
+const PREF_IDS = ["oIdle", "oReady", "oComm", "oLabels", "oActive", "oBlk", "oObj", "heapOut", "instLog", "instWin", "logWin", "smWin", "trigPause"];
 function savePrefs() {
   try { localStorage.setItem("gzscope.prefs", JSON.stringify({
     checks: Object.fromEntries(PREF_IDS.map(id => [id, $(id).checked])), metric: $("instMetric").value,

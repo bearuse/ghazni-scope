@@ -4,3 +4,4 @@ __pycache__/
 *.gzscope
 *.egg-info/
 dist/
+node_modules/
