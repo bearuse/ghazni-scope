@@ -61,7 +61,7 @@ Ghazni Scope의 대표 화면입니다. 모두 이 저장소의 FreeRTOS 예제(
 ![User Events](08-user-events.png)
 
 - `scope_user(1, …)`로 남긴 센서 값이 그래프로 나옵니다.
-- `scope_printf`로 남긴 글("sample 4800 processed", "high waited 20 ms for bus_lock")은 위쪽 띠와 아래 표에 나옵니다.
+- `scope_printf`로 남긴 글("sample … processed", "high waited 20 ms for bus_lock")은 위쪽 띠와 아래 표에 나옵니다.
 
 ### 9. State Machines
 ![State Machines](09-state-machines.png)
@@ -73,8 +73,8 @@ Ghazni Scope의 대표 화면입니다. 모두 이 저장소의 FreeRTOS 예제(
 
 `pvPortMalloc`/`vPortFree` 사용량입니다.
 
-- `consumer`는 5455번 할당하고 5454번 해제했습니다. 하나는 지금 쓰는 중입니다.
-- "(태스크 밖)"은 스케줄러 시작 전에 할당된 태스크 스택·큐입니다.
+- `consumer`는 수천 번 할당하고 해제했고, 지금 쓰고 있는 블록은 하나입니다(할당 수 = 해제 수 + 1).
+- "(태스크 밖)"은 스케줄러 시작 전에 할당된 태스크 스택·큐입니다. 크고 변하지 않아서 그래프에서는 기본으로 뺍니다(체크 상자 '태스크 밖 할당은 그래프에서 빼기'). 표에는 그대로 나옵니다.
 - 오른쪽 표는 아직 해제되지 않은 블록입니다(누수 찾기).
 
 ## 관계와 통계
@@ -119,4 +119,4 @@ mutex `bus_lock` 하나에 일어난 일을 시간순으로 봅니다. 매 주�
 오른쪽에 `resp consumer >5ms`(consumer의 응답 시간이 5 ms를 넘으면)를 걸어 둔 화면입니다.
 
 - 조건이 맞을 때마다 ⚑ 북마크가 생기고, 화면이 그 순간에서 멈춥니다.
-- 이 장면은 consumer의 응답이 83 ms나 걸린 이유를 보여 줍니다. mutex를 잡은 `low`가 상속받은 우선순위 5로 도는 동안, 우선순위 3인 `consumer`는 CPU를 받지 못하고 기다렸습니다(옅은 회색 띠).
+- 이 장면은 consumer의 응답이 수십 ms나 걸린 이유를 보여 줍니다. mutex를 잡은 `low`가 상속받은 우선순위 5로 도는 동안, 우선순위 3인 `consumer`는 CPU를 받지 못하고 기다렸습니다(옅은 회색 띠).

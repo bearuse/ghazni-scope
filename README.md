@@ -111,6 +111,7 @@ third_party/          FreeRTOS-Kernel (서브모듈, V11.3.3, MIT)
 ```sh
 make test-host        # PC 도구만: 프레임 해석, 분석 모델, C 인코더와 Python 해석기가 맞는지
 make test             # + FreeRTOS를 Linux와 Cortex-M3(QEMU)에서 실제로 돌려 확인
+make test-ui          # 브라우저로 화면 12개를 열어 오류 없이 그려지는지 (node, playwright 필요)
 ```
 
 `tests/run_freertos.py`는 예제를 실제로 돌려 받은 스트림에서 다음을 확인합니다: 유실 0, 모든 태스크 이름, 객체 이름과 종류(큐 1, mutex 1, 세마포어 2, 이벤트 그룹 1), 막힌 이유(consumer는 큐, high는 mutex, worker는 이벤트 그룹, isr_handler는 세마포어), mutex를 잡은 태스크와 시간, 매 주기 우선순위 상속(1 → 5 → 1), 큐에 쌓인 개수, 세마포어 개수, 20 ms마다 들어오는 인터럽트와 처리 시간, printf 글·상태 기계·사용자 값, 힙, 스택 사용량. GitHub Actions가 푸시마다 돌리며, 저장소에서 바로 돌린 것과 `pip install`로 설치한 것 둘 다 시험합니다.
