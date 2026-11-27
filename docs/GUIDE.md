@@ -5,10 +5,10 @@
 ## 1. 띄우기
 
 ```sh
-python3 host/ghazni_scope.py <연결 방법>
+ghazni-scope <연결 방법>
 ```
 
-그리고 브라우저에서 <http://localhost:8800>을 엽니다. 도구를 끄면(Ctrl+C) 화면도 멈춥니다.
+설치는 README의 'PC 도구 설치'를 보세요(설치하지 않았다면 저장소 맨 위에서 `python3 -m ghazni_scope <연결 방법>`). 그리고 브라우저에서 <http://localhost:8800>을 엽니다. 도구를 끄면(Ctrl+C) 화면도 멈춥니다.
 
 | 연결 방법 | 언제 |
 |---|---|

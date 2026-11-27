@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """FreeRTOS end to end: build the demo (examples/common/demo.c) for a
-target, run it, read its stream with host/ghazni_scope.py --check and
+target, run it, read its stream with ghazni-scope --check and
 check what the Scope saw.
 
     tests/run_freertos.py posix     FreeRTOS on Linux (POSIX port)
@@ -10,7 +10,10 @@ check what the Scope saw.
 import json, os, shutil, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCOPE = os.path.join(ROOT, "host", "ghazni_scope.py")
+# the tool: this checkout's package, or (SCOPE_INSTALLED=1) the installed command
+SCOPE = ["ghazni-scope"] if os.environ.get("SCOPE_INSTALLED") else [sys.executable, "-m", "ghazni_scope"]
+TOOL_ENV = dict(os.environ) if os.environ.get("SCOPE_INSTALLED") else \
+    dict(os.environ, PYTHONPATH=ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""))
 QEMU = os.environ.get("QEMU_ARM", "qemu-system-arm")
 fails = 0
 
@@ -25,8 +28,8 @@ def scope(cmd, secs):
     """Run the target program under the host tool; returns its summary."""
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "s.json")
-        env = dict(os.environ, SCOPE_JSON=out)
-        r = subprocess.run([sys.executable, SCOPE, "--exec", cmd, "--check", str(secs), "--quiet"],
+        env = dict(TOOL_ENV, SCOPE_JSON=out)
+        r = subprocess.run(SCOPE + ["--exec", cmd, "--check", str(secs), "--quiet"],
                            env=env, capture_output=True, text=True, timeout=secs + 90)
         print("   ", r.stdout.splitlines()[0] if r.stdout else r.stderr[-300:])
         if r.returncode != 0 or not os.path.exists(out):
@@ -106,7 +109,7 @@ def live_stream(cmd, secs):
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
-    tool = subprocess.Popen([sys.executable, SCOPE, "--exec", cmd, "--port", str(port), "--quiet"],
+    tool = subprocess.Popen(SCOPE + ["--exec", cmd, "--port", str(port), "--quiet"], env=TOOL_ENV,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     events, segs = [], []
     try:
@@ -128,6 +131,7 @@ def live_stream(cmd, secs):
                 break
         r.close()
         snap = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/snapshot", timeout=10))
+        snap["_page"] = urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10).read().decode()
     finally:
         tool.kill()
         tool.wait()
@@ -154,6 +158,8 @@ if "posix" in targets:
         model = collections.Counter(tuple(e) for e in snap["events"] if e[0] <= t1)
         segs = collections.Counter(x for x in sg if x[3] <= t1)
         smodel = collections.Counter(tuple(x) for x in snap["segments"] if x[3] <= t1)
+        check("posix: the web page is served (packaged with the tool)",
+              "<title>Ghazni Scope</title>" in snap["_page"] and 'id="cTrace"' in snap["_page"], snap["_page"][:200])
         check("posix: live view (snapshot + deltas) holds exactly what the tool has: no item twice, none missing",
               len(ev) > 2000 and live == model and segs == smodel,
               (len(ev), sum((live - model).values()), sum((model - live).values()),

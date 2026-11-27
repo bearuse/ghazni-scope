@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghazni-scope"
+dynamic = ["version"]
+description = "Live RTOS trace viewer in the browser (Ghazni, FreeRTOS)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+serial = ["pyserial"]
+
+[project.scripts]
+ghazni-scope = "ghazni_scope.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bearuse/ghazni-scope"
+
+[tool.setuptools]
+packages = ["ghazni_scope"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ghazni_scope.__version__"}
+
+[tool.setuptools.package-data]
+ghazni_scope = ["web/*.html"]

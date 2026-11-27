@@ -4,7 +4,6 @@
 import os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCOPE = os.path.join(ROOT, "host", "ghazni_scope.py")
 fails = 0
 
 
@@ -15,8 +14,12 @@ def check(name, ok, detail=""):
 
 
 print("=== scope decoder: lost and repeated hello ===")
-sys.path.insert(0, os.path.join(ROOT, "host", "scope"))
-from model import Model                                    # noqa: E402
+# the package from this checkout, or (SCOPE_INSTALLED=1) the installed one
+if not os.environ.get("SCOPE_INSTALLED"):
+    sys.path.insert(0, ROOT)
+import ghazni_scope                                        # noqa: E402
+from ghazni_scope.model import Model                       # noqa: E402
+print(f"    ghazni_scope {ghazni_scope.__version__} from {os.path.dirname(ghazni_scope.__file__)}")
 TASKS = [{"id": 0, "prio": 1, "name": "a"}, {"id": 1, "prio": 2, "name": "b"}]
 HELLO = {"kind": "hello", "version": 1, "ncpus": 1, "hz": 1000000, "tasks": TASKS}
 def ev(first):
@@ -35,7 +38,7 @@ check("decoder: a new stream's hello resets", m.events_total == 0, m.events_tota
 
 # v2 frames: 16 event types ('D'), object names ('O'); instances and the
 # communication flow the model derives from them
-from protocol import parse                                 # noqa: E402
+from ghazni_scope.protocol import parse                    # noqa: E402
 import struct                                              # noqa: E402
 def zz(v):
     return (v << 1) ^ (v >> 63)
@@ -145,7 +148,7 @@ check("model 0.20: blocked on a mutex (and why), who held it, semaphore count, w
       (sb["blocked"], sb["holds"], sb["open_holds"], sb["semcount"], sb["serves"]))
 
 # triggers: parsing, and hits from the model's own evaluation
-from model import parse_trigger                            # noqa: E402
+from ghazni_scope.model import parse_trigger               # noqa: E402
 bad = []
 for t in ("resp pong 5ms", "resp pong >5", "nosuch x", "state 1"):
     try:
@@ -166,10 +169,7 @@ ts = {x["text"]: x["hits"] for x in mt.snapshot()["triggers"]}
 check("triggers: IRQ handler time, user value, state entered; no hit below the limit; duplicates merged",
       ts == {"isr * >5us": 1, "user 9 >40": 1, "state 2 RUN": 1, "resp * >1ms": 0}, ts)
 
-import importlib.util                                      # noqa: E402
-_sp = importlib.util.spec_from_file_location("ghazni_scope_cli", SCOPE)
-_gs = importlib.util.module_from_spec(_sp)
-_sp.loader.exec_module(_gs)
+from ghazni_scope import cli as _gs                         # noqa: E402
 check("UDP stream: datagrams only from the target (others on the network dropped)",
       _gs.from_target("192.168.1.50", "192.168.1.50") and not _gs.from_target("192.168.1.50", "192.168.1.66")
       and _gs.from_target("127.0.0.1", "127.0.0.1"))
@@ -179,7 +179,7 @@ check("UDP stream: datagrams only from the target (others on the network dropped
 # event type, 32-bit arguments, a backward timestamp, COBS blocks
 print("=== C encoder -> Python decoder ===")
 import subprocess, tempfile                                # noqa: E402
-from protocol import Splitter                              # noqa: E402
+from ghazni_scope.protocol import Splitter                 # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
     exe = os.path.join(tmp, "encode_test")
     cc = os.environ.get("CC", "cc")

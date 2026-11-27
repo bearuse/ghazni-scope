@@ -1,6 +1,6 @@
 # Ghazni Scope 스트림 형식 (버전 3)
 
-타깃(RTOS)이 PC 도구로 보내는 바이트의 형식입니다. Ghazni 커널과 FreeRTOS 기록기가 똑같은 형식을 보내고, 도구(`host/ghazni_scope.py`)는 둘을 구분하지 않고 읽습니다. **다른 RTOS에 Scope를 붙이려면 이 형식으로 보내기만 하면 됩니다.** C 정의는 `include/scope_proto.h`, 압축·포장 코드는 `include/scope_encode.h`(헤더만, libc 없이 동작)에 있으니 그대로 가져다 쓰세요.
+타깃(RTOS)이 PC 도구로 보내는 바이트의 형식입니다. Ghazni 커널과 FreeRTOS 기록기가 똑같은 형식을 보내고, 도구(`ghazni-scope`, `ghazni_scope/`)는 둘을 구분하지 않고 읽습니다. **다른 RTOS에 Scope를 붙이려면 이 형식으로 보내기만 하면 됩니다.** C 정의는 `include/scope_proto.h`, 압축·포장 코드는 `include/scope_encode.h`(헤더만, libc 없이 동작)에 있으니 그대로 가져다 쓰세요.
 
 모든 정수는 리틀 엔디언입니다.
 
@@ -167,9 +167,9 @@ FreeRTOS 기록기(`targets/freertos/scope_freertos.c`, 약 530줄)가 그대로
 2. **RTOS 훅에 연결**: 문맥 전환(SWITCH, 나가는 태스크가 왜 멈췄는지 함께), 준비됨(WAKE), 큐·세마포어·mutex 주기·가져가기(SIGNAL, TAKE), 우선순위 상속(PRIO). 대부분의 RTOS에 trace 훅이 있습니다(Zephyr의 tracing API, ThreadX의 TX_EVENT_TRACE, RT-Thread의 hook, embOS의 SystemView API 등).
 3. **태스크·객체 번호**: RTOS의 TCB·객체 포인터를 0부터의 작은 번호로 바꾸는 표.
 4. **보내는 태스크**: 주기적으로 링을 비워 `scope_frame_events` + `scope_wire`로 보내고, 'H'(1초마다 반복)와 'O', 'S'를 보냄.
-5. 시험: `python3 host/ghazni_scope.py --exec ... --check 5`가 요약을 출력하고, `SCOPE_JSON=파일`을 주면 도구가 본 것을 JSON으로 남깁니다. `tests/run_freertos.py`가 그것으로 확인하는 방법을 보여 줍니다.
+5. 시험: `ghazni-scope --exec ... --check 5`가 요약을 출력하고, `SCOPE_JSON=파일`을 주면 도구가 본 것을 JSON으로 남깁니다. `tests/run_freertos.py`가 그것으로 확인하는 방법을 보여 줍니다.
 
-hello의 OS 바이트에 새 값을 쓰려면 `host/scope/protocol.py`의 `OS_NAME`에 이름을 더하세요(없으면 "os 2"처럼 나옵니다).
+hello의 OS 바이트에 새 값을 쓰려면 `ghazni_scope/protocol.py`의 `OS_NAME`에 이름을 더하세요(없으면 "os 2"처럼 나옵니다).
 
 ## 4. 버전
 

@@ -13,7 +13,7 @@ carries user events, and names endpoints and notifications.
 import collections
 import threading
 
-from protocol import TEV, IDLE, NONE, STATES, TSTR_FIRST, TSTR_STATE, HEAP_ADDR
+from .protocol import TEV, IDLE, NONE, STATES, TSTR_FIRST, TSTR_STATE, HEAP_ADDR
 
 BLOCKING = {3, 4, 5, 6, 7, 8, 9, 10}     # TS_*: the task stopped of its own accord (or died)
 EVENTS_KEPT = 200000

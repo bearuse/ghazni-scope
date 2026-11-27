@@ -11,9 +11,21 @@ jobs:
           submodules: recursive
       - name: tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-arm clang lld
-      - name: host unit tests
+      - name: host unit tests (this checkout)
         run: python3 tests/test_host.py
       - name: FreeRTOS on Linux (POSIX port)
         run: python3 tests/run_freertos.py posix
       - name: FreeRTOS on Cortex-M3 (QEMU mps2-an385)
         run: python3 tests/run_freertos.py mps2
+      # the package as users get it: installed with pipx, then the same tests
+      # run against the installed command and module
+      - name: install with pipx
+        run: |
+          pipx install .
+          pipx inject ghazni-scope pyserial
+          ghazni-scope --version
+      - name: tests against the installed package
+        run: |
+          PY="$(pipx environment --value PIPX_LOCAL_VENVS)/ghazni-scope/bin/python"
+          SCOPE_INSTALLED=1 "$PY" tests/test_host.py
+          SCOPE_INSTALLED=1 python3 tests/run_freertos.py posix
