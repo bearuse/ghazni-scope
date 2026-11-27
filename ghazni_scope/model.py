@@ -22,9 +22,10 @@ KEEP_S = 120.0          # history kept for late browsers and export
 EVENTS_SENT = 60000     # raw events in one snapshot (the browser keeps its own history)
 
 
+# what each trigger measures (English; the page shows its own language from the kind)
 TRIGGER_KINDS = {
-    "resp": "응답 시간", "exec": "실행 시간", "lat": "깨어남 지연", "isr": "인터럽트 처리 시간",
-    "user": "사용자 값", "state": "상태 진입", "fault": "폴트", "throttle": "throttle", "heap": "힙 경고",
+    "resp": "response time", "exec": "execution time", "lat": "wake-up latency", "isr": "interrupt time",
+    "user": "user value", "state": "state entered", "fault": "fault", "throttle": "throttle", "heap": "heap warning",
 }
 _UNITS = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "µs": 1e-6}
 
@@ -35,18 +36,18 @@ def parse_trigger(text):
     -> dict, or raise ValueError with a reason."""
     w = text.split()
     if not w or w[0] not in TRIGGER_KINDS:
-        raise ValueError("종류는 " + ", ".join(TRIGGER_KINDS))
+        raise ValueError("kind must be one of " + ", ".join(TRIGGER_KINDS))
     k, who = w[0], (w[1] if len(w) > 1 else "*")
     tr = {"kind": k, "who": who, "text": " ".join(w)}
     if k in ("fault", "throttle", "heap"):
         return tr
     if k == "state":
         if len(w) < 3:
-            raise ValueError("state <기계 번호> <상태 이름>")
+            raise ValueError("state <machine number> <state name>")
         tr["value"] = w[2]
         return tr
     if len(w) < 3 or w[2][0] not in "<>":
-        raise ValueError(f"{k} <{'채널' if k == 'user' else '태스크·인터럽트 이름 또는 *'}> >값 (예: >5ms)")
+        raise ValueError(f"{k} <{'channel' if k == 'user' else 'task or interrupt name, or *'}> >value (e.g. >5ms)")
     tr["op"], v = w[2][0], w[2][1:].strip()
     if k == "user":
         tr["value"] = float(v)
@@ -56,7 +57,7 @@ def parse_trigger(text):
                 tr["value"] = float(v[:-len(u)]) * _UNITS[u]
                 break
         else:
-            raise ValueError("시간에는 단위를 붙이세요: s, ms, us")
+            raise ValueError("put a unit on times: s, ms, us")
     return tr
 
 
@@ -456,7 +457,7 @@ class Model:
             elif kind in ("user", "state"):
                 if w != "*" and w != str(who):
                     continue
-                label = f"{self._name(task)} {'ch' if kind == 'user' else '기계 '}{who}"
+                label = f"{self._name(task)} {'ch' if kind == 'user' else 'machine '}{who}"
             else:
                 if w != "*" and w != self._name(who):
                     continue
@@ -464,16 +465,17 @@ class Model:
             if kind == "state":
                 if value != tr["value"]:
                     continue
-                what = f"{label} → {value}"
+                val = f"→ {value}"
             elif "op" in tr:
-                v = value if kind == "user" else value
+                v = value
                 if not (v > tr["value"] if tr["op"] == ">" else v < tr["value"]):
                     continue
-                what = f"{label} {TRIGGER_KINDS[kind]} " + (f"{int(v)}" if kind == "user" else f"{v * 1e3:.3f} ms")
+                val = f"{int(v)}" if kind == "user" else f"{v * 1e3:.3f} ms"
             else:
-                what = f"{label} {TRIGGER_KINDS[kind]}"
+                val = ""
+            what = f"{label} {val}" if kind == "state" else f"{label} {TRIGGER_KINDS[kind]} {val}".rstrip()
             tr["hits"] += 1
-            self.trig_hits.append((start, tr["id"], what))
+            self.trig_hits.append((start, tr["id"], what, kind, label, val))
 
     def _close(self, task, t):
         start, ex = self.inst_open.pop(task)
