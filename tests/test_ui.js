@@ -29,7 +29,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.log('=== web page (FreeRTOS on Linux, live) ===');
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 850 } });
+    const page = await browser.newPage({ viewport: { width: 1400, height: 850 }, locale: 'ko-KR' });
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -99,6 +99,52 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       [...document.querySelectorAll('input[placeholder]')].map(i => i.placeholder).join(' '));
     const ghazni = ['ghazni_trace', 'uart_drv', '셸:', 'ntfn ', 'notification '].filter(w => text.includes(w));
     check('no Ghazni-only text on a FreeRTOS stream', ghazni.length === 0, ghazni);
+    check('Korean page for a Korean browser', /[가-힣]/.test(text) && (await page.textContent('#bLang')) === 'EN', null);
+
+    // English: a browser that is not Korean gets English; nothing Korean anywhere,
+    // text drawn on the canvases included
+    console.log('=== the page in English ===');
+    const en = await browser.newPage({ viewport: { width: 1400, height: 850 }, locale: 'en-US' });
+    const enErrors = [];
+    en.on('pageerror', e => enErrors.push(String(e)));
+    await en.addInitScript(() => {
+      window.__drawn = new Set();
+      const f = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (t, ...a) { window.__drawn.add(String(t)); return f.call(this, t, ...a); };
+    });
+    await en.goto(`http://127.0.0.1:${port}/`);
+    await en.waitForFunction(() => typeof D !== "undefined" && D.events && D.events.length > 3000, null, { timeout: 30000 });
+    await en.fill('#trigIn', 'resp consumer >1ms'); await en.click('#trigAdd'); await sleep(1500);
+    await en.fill('#trigIn', 'resp consumer 5ms'); await en.click('#trigAdd'); await sleep(300);    // refused: a reason
+    await en.click('#bPause');
+    const korean = new Set();
+    const scan = async where => {
+      const t = await en.evaluate(() => document.body.innerText + '\n' +
+        [...document.querySelectorAll('[title], [placeholder]')].filter(e => e.id !== 'bLang').map(e => (e.title || '') + ' ' + (e.placeholder || '')).join('\n') + '\n' +
+        [...window.__drawn].join('\n'));
+      for (const line of t.split('\n')) if (/[가-힣]/.test(line) && line.trim() !== '한국어') korean.add(where + ': ' + line.trim().slice(0, 80));
+    };
+    for (const v of ['trace', 'log', 'load', 'inst', 'user', 'sm', 'heap', 'deps', 'comm', 'obj', 'stats', 'console']) {
+      await en.click(`nav a[data-v=${v}]`); await sleep(500); await scan(v);
+    }
+    await en.click('nav a[data-v=trace]'); await en.click('#bHorz'); await sleep(400); await scan('horizontal');
+    await en.mouse.click(700, 500); await sleep(300); await scan('selection');
+    await en.click('nav a[data-v=stats]'); await en.click('#bCmpA'); await sleep(300); await scan('compare');
+    const broken = await en.evaluate(() => [...window.__drawn].filter(t => /NaN|undefined|\[object/.test(t)));
+    check('English page: no text drawn as NaN or undefined', broken.length === 0, broken.slice(0, 8));
+    check('English page: no Korean text anywhere (views, titles, canvases, selection)', korean.size === 0 && !enErrors.length,
+      { korean: [...korean].slice(0, 12), enErrors });
+    const enText = await en.evaluate(() => document.body.innerText);
+    check('English page: English labels, the switch offers Korean',
+      /statistics report/i.test(enText) && /bookmarks/i.test(enText) && (await en.textContent('#bLang')) === '한국어',
+      { lang: await en.textContent('#bLang'), text: enText.slice(0, 300) });
+    const why = await en.textContent('#trigErr');
+    check('English page: a refused trigger says why in English', why.includes('value (e.g. >5ms)'), why);
+    const bm = await en.evaluate(() => bms.map(b => b.name));
+    check('English page: trigger bookmarks named in English', bm.some(n => /consumer response time [0-9.]+ ms/.test(n)), bm.slice(0, 4));
+    await en.click('#bLang'); await sleep(1500);
+    check('the switch turns the page Korean (and remembers it)', (await en.textContent('#bLang')) === 'EN'
+      && /[가-힣]/.test(await en.evaluate(() => document.body.innerText)), null);
   } finally {
     await browser.close();
     tool.kill();

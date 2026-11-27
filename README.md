@@ -124,7 +124,29 @@ Ghazni Scope is a free (MIT) live trace viewer for RTOSes, similar in spirit to 
 - Ghazni: the kernel has the recorder built in.
 - Other RTOSes: implement the stream format in `docs/PROTOCOL.md` (`include/scope_encode.h` does the encoding).
 
-Try it: `git clone --recursive …; make demo` (FreeRTOS POSIX port on Linux) and open http://localhost:8800. `make test` runs the host unit tests and end-to-end checks on Linux and on a Cortex-M3 under QEMU.
+The page is in English or Korean (from the browser's language; the button at the top right switches and remembers).
+
+![Trace View in English: priority inheritance on FreeRTOS](screenshots/en-trace-view.png)
+
+**Install the host tool** (Python 3.8+, no other dependencies):
+
+```sh
+pipx install git+https://github.com/bearuse/ghazni-scope     # Ubuntu/Debian: sudo apt install pipx
+pipx inject ghazni-scope pyserial                            # only for --serial
+ghazni-scope --serial /dev/ttyUSB0 --baud 921600             # then open http://localhost:8800
+```
+
+**Try it without hardware**: `git clone --recursive https://github.com/bearuse/ghazni-scope && cd ghazni-scope && make demo` runs FreeRTOS on Linux (POSIX port) and opens the live view; `make demo-m3` does the same on a Cortex-M3 under QEMU.
+
+**Add it to your FreeRTOS project**:
+1. Build `targets/freertos/scope_freertos.c`; add `include/` and `targets/freertos/` to the include path.
+2. At the end of `FreeRTOSConfig.h`: `configUSE_TRACE_FACILITY 1`, then `#include "scope_freertos.h"`.
+3. Write three port functions: `scope_port_time()` (a free-running timestamp, e.g. the DWT cycle counter), `scope_port_hz()`, `scope_port_write()` (e.g. a UART).
+4. Call `scope_init()` before `vTaskStartScheduler()`; name interrupts with `scope_isr_name()` and wrap handlers in `scope_isr_begin()`/`scope_isr_end()`; name queues with `vQueueAddToRegistry()`.
+
+Costs on a Cortex-M3: about 8.7 KB of code and 39 KB of RAM (32 KB of it the event ring, `-DSCOPE_RING_EVENTS=512` makes it 8 KB). The detailed documents (`docs/`) are in Korean.
+
+`make test` runs the host unit tests and end-to-end checks on Linux and on a Cortex-M3 under QEMU; `make test-ui` opens every view in a browser (both languages).
 
 ## 라이선스
 

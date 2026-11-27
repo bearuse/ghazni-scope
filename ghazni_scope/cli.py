@@ -387,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
             # the live view's trigger conditions are checked over the file as well
             m = load_recording(self.rfile.read(n), [t["text"] for t in Handler.live.triggers])
             if not m.tasks:
-                self._send(400, "application/json", json.dumps({"ok": False, "error": "Scope 기록이 아닙니다 (hello 프레임 없음)"}).encode())
+                self._send(400, "application/json", json.dumps({"ok": False, "error": "not a Scope recording (no hello frame)"}).encode())
                 return
             Handler.model, Handler.source, Handler.gen = m, "file:" + name, Handler.gen + 1
             self._send(200, "application/json", json.dumps({"ok": True, "events": m.events_total, "seconds": round(m.now, 3)}).encode())
