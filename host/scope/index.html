@@ -210,23 +210,23 @@ svg text { font: 11px -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
       <div class="vbody"><canvas id="cInst"></canvas></div>
     </section>
     <section class="view" id="v-user">
-      <div class="vbar"><b>User Events</b> <span>태스크의 <code>ghazni_trace_user(channel, value)</code>, 셸 <code>mark</code></span><button class="csv" data-csv="userTab">CSV</button></div>
+      <div class="vbar"><b>User Events</b> <span id="hUser">태스크가 남긴 값과 글</span><button class="csv" data-csv="userTab">CSV</button></div>
       <div class="vbody" style="display:grid;grid-template-rows:55% 45%">
         <div style="position:relative"><canvas id="cUser"></canvas></div>
         <div class="scroll"><table id="userTab" class="compact"></table></div></div>
     </section>
     <section class="view" id="v-sm">
-      <div class="vbar"><b>State Machines</b> <span>태스크의 <code>ghazni_trace_state(machine, "STATE")</code>: 상태가 언제 바뀌었고 얼마나 머물렀는지</span>
+      <div class="vbar"><b>State Machines</b> <span id="hSm">태스크가 알린 상태가 언제 바뀌었고 얼마나 머물렀는지</span>
         <label><input type="checkbox" id="smWin"> 보이는 구간만</label> <span class="hint">처음엔 마지막 활동 구간. 끌어서 확대, 더블클릭: 전체 기록 ↔ 마지막 활동</span><button class="csv" data-csv="smTab,smTr">CSV</button></div>
       <div class="vbody" style="display:grid;grid-template-rows:minmax(120px,45%) 1fr">
         <div style="position:relative"><canvas id="cSm"></canvas></div>
         <div class="scroll" style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-content:start"><table id="smTab"></table><table id="smTr"></table></div></div>
     </section>
     <section class="view" id="v-heap">
-      <div class="vbar"><b>Memory Heap</b> <span>할당기가 알린 할당·해제(<code>ghazni_trace_heap</code>, 미들웨어 <code>malloc</code>): 사용량 변화와 아직 해제되지 않은 블록</span> <span class="hint">처음엔 마지막 활동 구간. 끌어서 확대, 더블클릭: 전체 기록 ↔ 마지막 활동</span><button class="csv" data-csv="heapTab,heapLive,heapWarn">CSV</button></div>
+      <div class="vbar"><b>Memory Heap</b> <span id="hHeap">할당기가 알린 할당·해제: 사용량 변화와 아직 해제되지 않은 블록</span> <span class="hint">처음엔 마지막 활동 구간. 끌어서 확대, 더블클릭: 전체 기록 ↔ 마지막 활동</span><button class="csv" data-csv="heapTab,heapLive,heapWarn">CSV</button></div>
       <div class="vbody" style="display:grid;grid-template-rows:minmax(120px,48%) 1fr">
         <div style="position:relative"><canvas id="cHeap"></canvas></div>
-        <div class="scroll" style="display:grid;grid-template-columns:1fr 1.2fr;gap:0 12px;align-content:start"><table id="heapTab"></table><table id="heapLive"></table><table id="heapWarn" style="grid-column:1/-1;margin-top:10px"></table></div></div>
+        <div class="scroll" style="display:grid;grid-template-columns:1fr 1.2fr;gap:0 12px;align-content:start"><table id="heapTab" style="align-self:start"></table><table id="heapLive"></table><table id="heapWarn" style="grid-column:1/-1;margin-top:10px"></table></div></div>
     </section>
     <section class="view" id="v-deps">
       <div class="vbar"><b>Dependency Graph</b> <span>태스크가 누구를 기다리나: CALL(클라이언트 → 서버, 응답까지 기다린 시간)과 signal(보낸 태스크 → 깨어난 태스크). 선 굵기 = 횟수</span></div>
@@ -253,7 +253,7 @@ svg text { font: 11px -apple-system, "Segoe UI", "Noto Sans KR", sans-serif; }
     </section>
     <section class="view" id="v-console">
       <div class="vbar"><b>Console</b>
-        <input id="cmd" placeholder="셸 명령 (예: ps, hog, bench 1000, mark 1 42)" size="42">
+        <input id="cmd" placeholder="타깃으로 보낼 글" size="42">
         <button id="bSend">보내기</button></div>
       <div class="vbody"><div class="scroll" id="conScroll"><div id="console"></div></div></div>
     </section>
@@ -305,6 +305,27 @@ function tname(id) {
 }
 function epName(i) { return D.objects.endpoints[i] || "ep" + i; }
 function ntfnKind(i) { return (D.objects.ntfn_kinds || [])[i] || "event"; }
+// what the page says about the API differs per system (hello byte [5])
+function osText() {
+  return D.os === "Ghazni" ? {
+    user: '태스크의 <code>ghazni_trace_user(channel, value)</code>(값), <code>ghazni_trace_printf</code>(글), 셸 <code>mark</code>',
+    sm: '태스크의 <code>ghazni_trace_state(machine, "STATE")</code>: 상태가 언제 바뀌었고 얼마나 머물렀는지',
+    heap: '할당기가 알린 할당·해제(<code>ghazni_trace_heap</code>, 미들웨어 <code>malloc</code>): 사용량 변화와 아직 해제되지 않은 블록',
+    cmd: "셸 명령 (예: ps, hog, bench 1000, mark 1 42)",
+    userEmpty: "(셸: mark 1 42)", smEmpty: "(셸: tdemo)", heapEmpty: "(셸: tdemo, 또는 미들웨어 태스크)",
+  } : {
+    user: '태스크의 <code>scope_user(channel, value)</code>(값), <code>scope_printf</code>(글)',
+    sm: '태스크의 <code>scope_state(machine, "STATE")</code>: 상태가 언제 바뀌었고 얼마나 머물렀는지',
+    heap: '<code>pvPortMalloc</code> / <code>vPortFree</code>: 사용량 변화와 아직 해제되지 않은 블록. "(태스크 밖)" = 스케줄러 시작 전이나 인터럽트에서 할당',
+    cmd: "타깃으로 보낼 글 (프로그램의 표준 입력·UART)",
+    userEmpty: "(scope_user)", smEmpty: "(scope_state)", heapEmpty: "(pvPortMalloc)",
+  };
+}
+function osTexts() {
+  const o = osText();
+  $("hUser").innerHTML = o.user; $("hSm").innerHTML = o.sm; $("hHeap").innerHTML = o.heap; $("cmd").placeholder = o.cmd;
+}
+const heapName = id => id === 0xFE ? "(태스크 밖)" : tname(id);
 function objLabel(k, i) {               // "mutex pi_lock", "semaphore pi_done", "queue samples", "ep pong"
   if (k === "ep") return "ep " + epName(i);
   const kind = ntfnKind(i);
@@ -393,7 +414,8 @@ function trimOld() {
 }
 function apply(d, full) {
   const prevNow = D.now;
-  D.hz = d.hz; D.ncpus = d.ncpus; D.now = d.now; if (d.os) D.os = d.os;
+  D.hz = d.hz; D.ncpus = d.ncpus; D.now = d.now;
+  if (d.os && d.os !== D.osShown) { D.os = D.osShown = d.os; osTexts(); }
   D.tasks = d.tasks;
   if (!hideInit && Object.keys(d.tasks).length) {   // the recorder itself: hidden until asked for
     hideInit = true;
@@ -507,7 +529,7 @@ function drawTrace() {
     if (few.length) { drawTrace.folded = cols.length - few.length; cols = few; } else drawTrace.folded = 0;
   } else drawTrace.folded = 0;
   const showLabels = vert && $("oLabels").checked;
-  const RULER = vert ? 84 : 110, HEAD = vert ? 76 : 22, LAB = showLabels ? Math.min(300, Math.max(180, w * 0.28)) : 0;
+  const RULER = vert ? 84 : 110, HEAD = vert ? 76 : 40, LAB = showLabels ? Math.min(300, Math.max(180, w * 0.28)) : 0;
   // one column per interrupt seen in the window (the kernel timer included)
   const irqSet = new Set();
   for (let i = lowerBound(D.isr, 0, win.t0 - 0.05); i < D.isr.length && D.isr[i][0] <= win.t1; i++) irqSet.add(D.isr[i][2]);
@@ -557,7 +579,7 @@ function drawTrace() {
     const p = T(t);
     g.beginPath();
     if (vert) { g.moveTo(RULER, HEAD + p + .5); g.lineTo(w, HEAD + p + .5); g.stroke(); g.textAlign = "right"; g.fillText(fmtTick(t, step), RULER - 6, HEAD + p + 4); }
-    else { g.moveTo(RULER + p + .5, HEAD); g.lineTo(RULER + p + .5, h); g.stroke(); g.textAlign = "center"; g.fillText(fmtTick(t, step), RULER + p, 14); }
+    else { g.moveTo(RULER + p + .5, HEAD); g.lineTo(RULER + p + .5, h); g.stroke(); g.textAlign = "center"; g.fillText(fmtTick(t, step), RULER + p, HEAD - 8); }
   }
   // column backgrounds and headers
   g.textAlign = vert ? "center" : "right";
@@ -941,7 +963,7 @@ function drawUser() {
       i = j;
     }
   }
-  if (!us.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("값 사용자 이벤트가 아직 없습니다 (셸: mark 1 42)" + (tx.length ? ". 글 이벤트는 위 띠와 아래 표에" : ""), w / 2, (T0 + h - B) / 2); }
+  if (!us.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("값 사용자 이벤트가 아직 없습니다 " + osText().userEmpty + (tx.length ? ". 글 이벤트는 위 띠와 아래 표에" : ""), w / 2, (T0 + h - B) / 2); }
   const all = us.map(u => [u[0], u[1], u[2], String(u[3] | 0)]).concat(D.texts.map(x => [x[0], x[1], x[2], x[3], 1]))
     .sort((a, b) => b[0] - a[0]).slice(0, 600);
   const rows = all.map(u =>
@@ -1064,7 +1086,7 @@ function drawSm() {
       if (b - a > g.measureText(x[3]).width + 8) { g.fillStyle = "#fff"; g.textAlign = "left"; g.fillText(x[3], a + 4, y + rowH / 2 + 4); }
     });
   });
-  if (!keys.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("상태 이벤트가 아직 없습니다 (셸: tdemo)", w / 2, h / 2); }
+  if (!keys.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("상태 이벤트가 아직 없습니다 " + osText().smEmpty, w / 2, h / 2); }
   $("smTab").innerHTML = `<tr><th class="l">상태 기계</th><th class="l">상태</th><th>횟수</th><th>평균 머문 시간</th><th>최대</th></tr>` +
     Object.values(stats).map(s => `<tr><td class="l">${esc(s.m)}</td><td class="l"><span class="sw" style="background:${stColor(s.s)}"></span>${esc(s.s)}</td><td>${s.n}</td><td>${fmtD(s.sum / s.n)}</td><td>${fmtD(s.max)}</td></tr>`).join("");
   $("smTr").innerHTML = `<tr><th class="l">상태 기계</th><th class="l">전이</th><th>횟수</th></tr>` +
@@ -1099,16 +1121,16 @@ function drawHeap() {
     g.lineTo(X(tMax), lastY); g.stroke();
   });
   g.restore();
-  tasks.forEach((task, k) => { g.fillStyle = color(task); g.textAlign = "left"; g.fillText(tname(task), L + 8 + k * 90, 12); });
-  if (!tasks.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("힙 이벤트가 아직 없습니다 (셸: tdemo, 또는 미들웨어 태스크)", w / 2, h / 2); }
+  tasks.forEach((task, k) => { g.fillStyle = color(task); g.textAlign = "left"; g.fillText(heapName(task), L + 8 + k * 110, 12); });
+  if (!tasks.length) { g.fillStyle = css("--muted"); g.textAlign = "center"; g.fillText("힙 이벤트가 아직 없습니다 " + osText().heapEmpty, w / 2, h / 2); }
   const per = {};
   for (const x of D.heap) { const p = (per[x[1]] ||= { a: 0, f: 0, big: 0 }); if (x[2]) p.f++; else { p.a++; p.big = Math.max(p.big, x[3]); } }
   $("heapTab").innerHTML = `<tr><th class="l">태스크</th><th>지금</th><th>최대</th><th>할당</th><th>해제</th><th>가장 큰 블록</th></tr>` +
     Object.entries(D.heapNow).map(([id, [now, peak]]) => { const p = per[id] || { a: 0, f: 0, big: 0 };
-      return `<tr><td class="l"><span class="sw" style="background:${color(+id)}"></span>${esc(tname(+id))}</td><td>${now} B</td><td><b>${peak} B</b></td><td>${p.a}</td><td>${p.f}</td><td>${p.big} B</td></tr>`; }).join("");
+      return `<tr><td class="l"><span class="sw" style="background:${color(+id)}"></span>${esc(heapName(+id))}</td><td>${now} B</td><td><b>${peak} B</b></td><td>${p.a}</td><td>${p.f}</td><td>${p.big} B</td></tr>`; }).join("");
   $("heapLive").innerHTML = `<tr><th class="l">아직 해제되지 않은 블록</th><th>주소</th><th>크기</th><th>할당 시각</th><th>지난 시간</th></tr>` +
     D.heapLive.slice().sort((a, b) => a[2] - b[2]).map(([task, addr, t, size]) =>
-      `<tr class="click" data-t="${t}"><td class="l"><span class="sw" style="background:${color(task)}"></span>${esc(tname(task))}</td><td>0x${(addr >>> 0).toString(16)}</td><td>${size} B</td><td>${fmtT(t)}</td><td>${fmtD(D.now - t)}</td></tr>`).join("");
+      `<tr class="click" data-t="${t}"><td class="l"><span class="sw" style="background:${color(task)}"></span>${esc(heapName(task))}</td><td>0x${(addr >>> 0).toString(16)}</td><td>${size} B</td><td>${fmtT(t)}</td><td>${fmtD(D.now - t)}</td></tr>`).join("");
   $("heapWarn").innerHTML = !D.heapWarn.length ? "" :
     `<tr><th class="l">경고 (${D.heapWarn.length})</th><th class="l">무엇</th><th>주소</th><th>크기</th><th>시각</th></tr>` +
     D.heapWarn.slice().reverse().map(([t, kind, task, addr, size]) => `<tr class="click warn" data-t="${t}"><td class="l">${esc(tname(task))}</td>

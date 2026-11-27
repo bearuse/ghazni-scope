@@ -223,4 +223,19 @@ check("model: FreeRTOS stream, queue fill level counted (send +, receive -)",
 check("model: event group bits are not counted as a fill level",
       all(x[1] != 1 for x in sf["semcount"]), sf["semcount"])
 
+# ---- live deltas: the 1 ms overlap is not sent twice
+print("=== live view deltas ===")
+gs = _gs
+full = {"events": [[0.1, "wake", 0, 1, 0, 0], [0.2, "wake", 0, 2, 0, 0]], "segments": [[0, 1, 0.0, 0.2]]}
+prev = gs.delta_tails(full)
+d1, prev = gs.dedupe_delta({"events": [[0.2, "wake", 0, 2, 0, 0], [0.2005, "wake", 0, 3, 0, 0]],
+                            "segments": [[0, 1, 0.0, 0.2], [0, 2, 0.2, 0.3]]}, prev)
+d2, prev = gs.dedupe_delta({"events": [[0.2005, "wake", 0, 3, 0, 0], [0.19, "irq", 1, 0, 0, 5], [0.4, "wake", 0, 1, 0, 0]]}, prev)
+d3, prev = gs.dedupe_delta({"events": [[0.4, "wake", 0, 1, 0, 0], [0.4, "wake", 0, 1, 0, 0]]}, prev)
+check("live deltas: two identical events, one already sent: the other still sent",
+      d3["events"] == [[0.4, "wake", 0, 1, 0, 0]], d3)
+check("live deltas: items of the overlap sent once, a late item (another CPU) still sent",
+      d1["events"] == [[0.2005, "wake", 0, 3, 0, 0]] and d1["segments"] == [[0, 2, 0.2, 0.3]]
+      and d2["events"] == [[0.19, "irq", 1, 0, 0, 5], [0.4, "wake", 0, 1, 0, 0]], (d1, d2))
+
 sys.exit(1 if fails else 0)
