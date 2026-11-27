@@ -36,7 +36,7 @@ udp <this host as the target sees it> <port>') into the shell when it sees
 the prompt, and 'trace stream off' when it exits. The FreeRTOS recorder
 streams from the start.
 """
-import argparse, json, os, shlex, signal, socket, subprocess, sys, threading, time, urllib.parse
+import argparse, collections, json, os, shlex, signal, socket, subprocess, sys, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -271,6 +271,36 @@ def reader(link, model, args, state):
         state["eof"] = True
 
 
+# Live deltas overlap the previous one by 1 ms (an item can arrive a little
+# out of order, e.g. from another CPU), so the browser would get the items of
+# that 1 ms twice. Each delta drops what the previous message already carried.
+DELTA_LISTS = ("segments", "ready", "marks", "events", "instances", "users", "texts", "states", "heap",
+               "isr", "prios", "blocked", "holds", "serves", "semcount", "load")
+DELTA_TAIL = 5000           # the overlap is at the end of each list
+
+
+def delta_tails(d):
+    return {k: collections.Counter(json.dumps(x) for x in d.get(k, [])[-DELTA_TAIL:]) for k in DELTA_LISTS}
+
+
+def dedupe_delta(d, prev):
+    """-> (d without the items prev already sent, the tails to check the next delta against).
+    Counted: two identical items (two equal allocations in the same microsecond) are
+    both kept unless both were sent already."""
+    tails = delta_tails(d)
+    for k in DELTA_LISTS:
+        if k in d and prev.get(k):
+            seen, keep = collections.Counter(prev[k]), []
+            for x in d[k]:
+                j = json.dumps(x)
+                if seen[j] > 0:
+                    seen[j] -= 1
+                else:
+                    keep.append(x)
+            d[k] = keep
+    return d, tails
+
+
 class Handler(BaseHTTPRequestHandler):
     model = link = live = capture = None
     gen = 0                             # changes when the view switches between live and a file
@@ -323,6 +353,7 @@ class Handler(BaseHTTPRequestHandler):
                 snap["source"] = Handler.source
                 self.wfile.write(b"event: full\ndata: " + json.dumps(snap).encode() + b"\n\n")
                 last, console_n, ver, gen = snap["now"], snap["console_n"], self.model.version, Handler.gen
+                prev = delta_tails(snap)
                 while True:
                     time.sleep(0.2)
                     if Handler.gen != gen:      # switched to a file or back: start over
@@ -331,6 +362,7 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.write(b"event: full\ndata: " + json.dumps(snap).encode() + b"\n\n")
                         self.wfile.flush()
                         last, console_n, ver, gen = snap["now"], snap["console_n"], self.model.version, Handler.gen
+                        prev = delta_tails(snap)
                         continue
                     if self.model.version == ver:
                         self.wfile.write(b": idle\n\n")
@@ -338,6 +370,7 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     ver = self.model.version
                     d = self.model.snapshot(since=last - 0.001)
+                    d, prev = dedupe_delta(d, prev)
                     d["console"], console_n = self.model.console_after(console_n)
                     last = d["now"]
                     self.wfile.write(b"event: delta\ndata: " + json.dumps(d).encode() + b"\n\n")

@@ -60,7 +60,7 @@ make demo-m3
 | Object History | 객체 하나에 일어난 일을 시간순으로 |
 | Statistics Report | 태스크별 실행·응답 시간, CPU %, 스택 사용량, 인터럽트 처리 시간, Scope 자체 부하 |
 
-화면마다 쓰는 법은 [docs/GUIDE.md](docs/GUIDE.md)에 있습니다.
+화면마다 쓰는 법은 [docs/GUIDE.md](docs/GUIDE.md)에, 모든 화면의 캡처와 설명은 [screenshots/](screenshots/README.md)에 있습니다.
 
 ## 저장소 구성
 

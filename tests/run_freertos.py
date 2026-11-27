@@ -7,7 +7,7 @@ check what the Scope saw.
     tests/run_freertos.py mps2      FreeRTOS on Cortex-M3 in QEMU (mps2-an385)
     tests/run_freertos.py           both (mps2 skipped without clang/QEMU)
 """
-import json, os, shutil, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCOPE = os.path.join(ROOT, "host", "ghazni_scope.py")
@@ -98,6 +98,42 @@ def verify(s, target):
           (len(s["segments"]), c))
 
 
+def live_stream(cmd, secs):
+    """The browser's view of the stream: the full snapshot plus the live deltas
+    -> (events, run segments) as the page would hold them, and a full snapshot after."""
+    import socket, urllib.request
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    tool = subprocess.Popen([sys.executable, SCOPE, "--exec", cmd, "--port", str(port), "--quiet"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    events, segs = [], []
+    try:
+        end = time.time() + secs + 10
+        while time.time() < end:
+            try:
+                r = urllib.request.urlopen(f"http://127.0.0.1:{port}/stream", timeout=5)
+                break
+            except OSError:
+                time.sleep(0.3)
+        t_end = time.time() + secs
+        data = b""
+        for line in r:
+            if line.startswith(b"data: "):
+                d = json.loads(line[6:])
+                events += [tuple(e) for e in d.get("events", [])]
+                segs += [tuple(x) for x in d.get("segments", [])]
+            if time.time() > t_end:
+                break
+        r.close()
+        snap = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/snapshot", timeout=10))
+    finally:
+        tool.kill()
+        tool.wait()
+    return events, segs, snap
+
+
 def make(d, *args):
     r = subprocess.run(["make", "-s", "-C", os.path.join(ROOT, "examples", d), *args], capture_output=True, text=True)
     if r.returncode:
@@ -111,6 +147,17 @@ if "posix" in targets:
     if make("freertos-posix"):
         exe = os.path.join(ROOT, "examples", "freertos-posix", "build", "demo")
         verify(scope(f"env SCOPE_RUN_S=8 {exe}", 3), "posix")
+        ev, sg, snap = live_stream(exe, 4)
+        import collections
+        t1 = max(e[0] for e in ev) - 0.05            # what both have for sure
+        live = collections.Counter(e for e in ev if e[0] <= t1)
+        model = collections.Counter(tuple(e) for e in snap["events"] if e[0] <= t1)
+        segs = collections.Counter(x for x in sg if x[3] <= t1)
+        smodel = collections.Counter(tuple(x) for x in snap["segments"] if x[3] <= t1)
+        check("posix: live view (snapshot + deltas) holds exactly what the tool has: no item twice, none missing",
+              len(ev) > 2000 and live == model and segs == smodel,
+              (len(ev), sum((live - model).values()), sum((model - live).values()),
+               sum((segs - smodel).values()), sum((smodel - segs).values())))
     else:
         check("posix: build", False)
 if "mps2" in targets:

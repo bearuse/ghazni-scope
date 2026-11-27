@@ -113,8 +113,7 @@ void scope_rtos_task_create(void *tcb, const char *name, unsigned prio, void *st
     if (stack_hi && stack_hi > stack_lo)
         t->stack_size = (uint32_t)((char *)stack_hi - (char *)stack_lo) + sizeof(StackType_t);
     vTaskSetTaskNumber((TaskHandle_t)tcb, ntasks);     /* id + 1: 0 = not ours */
-    names_dirty = 1;
-    put(TEV_WAKE, (uint8_t)(ntasks - 1), 0, 0);
+    names_dirty = 1;                /* ready: FreeRTOS adds it to a ready list next (scope_rtos_ready) */
 }
 
 void scope_rtos_task_delete(void *tcb)
