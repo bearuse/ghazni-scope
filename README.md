@@ -11,6 +11,8 @@
 | **Ghazni** | Ghazni 커널에 내장 (tracer 태스크) | Ghazni 저장소의 `docs/SCOPE.md` |
 | 그 밖의 RTOS | 스트림 형식만 맞추면 됨 | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
 
+**처음이라면 [사용 매뉴얼](docs/MANUAL.md)부터 보세요.** 설치, 첫 실행, 보드에 붙이기, 화면 읽기, 문제 찾기를 순서대로 설명합니다.
+
 ![FreeRTOS: low가 mutex를 잡은 동안 high가 막히고, low가 우선순위 5를 물려받음](docs/img/freertos-trace.png)
 
 위 그림은 이 저장소의 FreeRTOS 예제입니다. `high`(우선순위 5)가 `lock bus_lock`으로 막히자 mutex를 잡고 있던 `low`의 우선순위가 1 → 5로 오르고(오른쪽 레이블 "low priority 1 → 5 (inherited)"), 가운데 `mutex bus_lock` 열에 low가 잡고 있던 구간이 보라색 막대로 그려집니다. `consumer`는 `recv samples`(큐가 빔), `isr_handler`는 `take isr_sem`, 그 밖의 태스크는 `sleep`(vTaskDelay)으로 멈춰 있습니다.
@@ -146,6 +148,8 @@ ghazni-scope --serial /dev/ttyUSB0 --baud 921600             # then open http://
 2. At the end of `FreeRTOSConfig.h`: `configUSE_TRACE_FACILITY 1`, then `#include "scope_freertos.h"`.
 3. Write three port functions: `scope_port_time()` (a free-running timestamp, e.g. the DWT cycle counter), `scope_port_hz()`, `scope_port_write()` (a UART, or an RTT buffer read by a debug probe: `targets/rtt`, then `ghazni-scope --tcp localhost:19021` with J-Link, `--tcp` to OpenOCD's RTT server, or `--rtt-gdb HOST:PORT --elf app.elf` through any GDB server).
 4. Call `scope_init()` before `vTaskStartScheduler()`; name interrupts with `scope_isr_name()` and wrap handlers in `scope_isr_begin()`/`scope_isr_end()`; name queues with `vQueueAddToRegistry()`.
+
+The user manual is [docs/MANUAL.md](docs/MANUAL.md) (Korean).
 
 Costs on a Cortex-M3: about 8.7 KB of code and 39 KB of RAM (32 KB of it the event ring, `-DSCOPE_RING_EVENTS=512` makes it 8 KB). The detailed documents (`docs/`) are in Korean.
 
