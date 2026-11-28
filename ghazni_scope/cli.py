@@ -9,8 +9,7 @@ keeps the console usable, and serves a live view at http://localhost:8800.
   # FreeRTOS (targets/freertos): a UART, or a program writing the stream to stdout
   ghazni-scope --serial /dev/ttyUSB0 --baud 921600
   ghazni-scope --exec examples/freertos-posix/build/demo
-  ghazni-scope --exec "qemu-system-arm -M mps2-an385 -display none -monitor none \
-                       -serial stdio -kernel examples/freertos-mps2/build/demo.elf"
+  ghazni-scope --exec "qemu-system-arm -M mps2-an385 -display none -monitor none -serial stdio -kernel demo.elf"
 
   # Ghazni (from the Ghazni tree, 'make scope' does the first)
   ghazni-scope --qemu build/qemu-virt/ghazni.elf     # starts QEMU, serial on a local TCP port
