@@ -358,8 +358,10 @@ void scope_rtos_heap(int op, void *addr, unsigned size)
         return;
     uint8_t who = xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED ? SCOPE_NONE
                   : task_id(xTaskGetCurrentTaskHandle());
+    UBaseType_t m = portSET_INTERRUPT_MASK_FROM_ISR();   /* the two halves back to back */
     put(TEV_HEAP, who, (uint8_t)op, size);
     put(TEV_HEAP, who, (uint8_t)op | HEAP_ADDR, (uint32_t)(uintptr_t)addr);
+    portCLEAR_INTERRUPT_MASK_FROM_ISR(m);
 }
 
 /* ---- interrupts and user events */

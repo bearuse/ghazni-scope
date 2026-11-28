@@ -1,5 +1,7 @@
 # Ghazni Scope 사용 매뉴얼
 
+인쇄하거나 따로 보관하려면 PDF판: [Ghazni-Scope-Manual.pdf](pdf/Ghazni-Scope-Manual.pdf) (`make manual-pdf`로 다시 만듦).
+
 이 매뉴얼은 Ghazni Scope를 처음 쓰는 분이 **설치 → 첫 실행 → 내 보드에 붙이기 → 화면 읽기 → 문제 찾기**까지 순서대로 따라갈 수 있도록 썼습니다. 처음부터 읽어도 되고, 필요한 장만 골라 읽어도 됩니다.
 
 | 이런 분은 | 여기부터 |
