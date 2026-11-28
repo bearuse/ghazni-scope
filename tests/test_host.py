@@ -303,4 +303,21 @@ check("RTT: finds the 'Scope' up-buffer, reads across the wrap, moves the read o
       r.name == "Scope" and got == b"ABCDEFG" and rd == 3 and again == b"", (r.name, got, rd, again))
 check("RTT: the CPU is stopped only around the reads and runs again after", log[-1] in ("go", "halt") and log.count("go") >= 2, log)
 
+# ---- heap events from two CPUs at once: each operation is two events (size,
+# then address); both CPUs' idle tasks (and code before the scheduler) share
+# one task id, so the halves interleave and must be paired per CPU
+print("=== heap: two CPUs, the same task id ===")
+mh = Model()
+mh.frame(dict(HELLO, ncpus=2))
+IDLE_ = 0xFF
+mh.frame({"kind": "events", "first": 0, "lost": 0, "events": [
+    (100, 15, 0, IDLE_, 0, 64),        (101, 15, 1, IDLE_, 0, 32),          # CPU 0 and 1: sizes
+    (102, 15, 0, IDLE_, 0x80, 0x1000), (103, 15, 1, IDLE_, 0x80, 0x2000),   # then the addresses
+    (200, 15, 1, IDLE_, 1, 0),         (201, 15, 1, IDLE_, 0x81, 0x1000),   # CPU 1 frees CPU 0's block
+]})
+sh = mh.snapshot()
+check("heap: halves paired per CPU (no lost allocation, no unknown free)",
+      not sh["heap_warn"] and [x[1] for x in sh["heap_live"]] == [0x2000] and [x[3] for x in sh["heap_live"]] == [32],
+      (sh["heap_warn"], sh["heap_live"]))
+
 sys.exit(1 if fails else 0)

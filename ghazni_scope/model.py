@@ -124,7 +124,7 @@ class Model:
         self.scope_pct = 0.0                                 # ... in the last stats period
         self._scope_prev = None
         self._str = {}                                       # (task, channel) -> [t, bytes]
-        self._heap_half = {}                                 # task -> (op, size) waiting for its address
+        self._heap_half = {}                                 # (task, cpu) -> (op, size) waiting for its address
         self.pending_call = {}                               # client -> (t, server or None)
         self.deps = {}                                       # (client, server, kind) -> [n, wait sum, wait max]
         self.connected = False
@@ -390,9 +390,9 @@ class Model:
     def _heap_ev(self, t, cpu, task, b, arg):
         op = b & ~HEAP_ADDR & 0xFF
         if not b & HEAP_ADDR:
-            self._heap_half[task] = (op, arg)
+            self._heap_half[(task, cpu)] = (op, arg)   # per CPU: both idle tasks are IDLE
             return
-        half = self._heap_half.pop(task, None)
+        half = self._heap_half.pop((task, cpu), None)
         if not half or half[0] != op:
             return
         size, addr = half[1], arg
