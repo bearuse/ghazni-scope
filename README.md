@@ -11,7 +11,7 @@
 | **Ghazni** | Ghazni 커널에 내장 (tracer 태스크) | Ghazni 저장소의 `docs/SCOPE.md` |
 | 그 밖의 RTOS | 스트림 형식만 맞추면 됨 | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
 
-**처음이라면 [사용 매뉴얼](docs/MANUAL.md)부터 보세요.** 설치, 첫 실행, 보드에 붙이기, 화면 읽기, 문제 찾기를 순서대로 설명합니다.
+**처음이라면 [사용 매뉴얼](docs/MANUAL.md)([PDF](docs/pdf/Ghazni-Scope-Manual.pdf))부터 보세요.** 설치, 첫 실행, 보드에 붙이기, 화면 읽기, 문제 찾기를 순서대로 설명합니다.
 
 ![FreeRTOS: low가 mutex를 잡은 동안 high가 막히고, low가 우선순위 5를 물려받음](docs/img/freertos-trace.png)
 
